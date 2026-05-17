@@ -1,5 +1,5 @@
 import type { Message } from "@langchain/langgraph-sdk";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import {
   getAssistantTurnUsageMessages,
@@ -62,4 +62,82 @@ test("aggregates token usage messages once per assistant turn", () => {
       (groupMessages) => groupMessages?.map((message) => message.id) ?? null,
     ),
   ).toEqual([null, null, ["ai-1", "ai-2"], null, ["ai-3"]]);
+});
+
+test("associates delayed tool results with their original tool call group", () => {
+  const consoleError = vi
+    .spyOn(console, "error")
+    .mockImplementation(() => undefined);
+  const messages = [
+    {
+      id: "human-1",
+      type: "human",
+      content: "Find docs",
+    },
+    {
+      id: "ai-1",
+      type: "ai",
+      content: "",
+      tool_calls: [{ id: "tool-1", name: "web_search", args: {} }],
+    },
+    {
+      id: "ai-2",
+      type: "ai",
+      content: "I found a useful page",
+    },
+    {
+      id: "tool-1-result",
+      type: "tool",
+      name: "web_search",
+      tool_call_id: "tool-1",
+      content: "[]",
+    },
+  ] as Message[];
+
+  try {
+    const groups = getMessageGroups(messages);
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(groups.map((group) => group.type)).toEqual([
+      "human",
+      "assistant:processing",
+      "assistant",
+    ]);
+    expect(groups[1]?.messages.map((message) => message.id)).toEqual([
+      "ai-1",
+      "tool-1-result",
+    ]);
+  } finally {
+    consoleError.mockRestore();
+  }
+});
+
+test("ignores orphan tool results from truncated history without logging an error", () => {
+  const consoleError = vi
+    .spyOn(console, "error")
+    .mockImplementation(() => undefined);
+  const messages = [
+    {
+      id: "tool-1-result",
+      type: "tool",
+      name: "web_search",
+      tool_call_id: "tool-1",
+      content: "[]",
+    },
+    {
+      id: "ai-1",
+      type: "ai",
+      content: "Here is the summary",
+    },
+  ] as Message[];
+
+  try {
+    const groups = getMessageGroups(messages);
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(groups.map((group) => group.type)).toEqual(["assistant"]);
+    expect(groups[0]?.messages.map((message) => message.id)).toEqual(["ai-1"]);
+  } finally {
+    consoleError.mockRestore();
+  }
 });

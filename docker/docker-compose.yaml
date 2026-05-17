@@ -77,6 +77,7 @@ services:
       - ${DEER_FLOW_EXTENSIONS_CONFIG_PATH}:/app/backend/extensions_config.json:ro
       - ../skills:/app/skills:ro
       - ${DEER_FLOW_HOME}:/app/backend/.deer-flow
+      - gateway-qmd-cache:/root/.cache/qmd
       # DooD: AioSandboxProvider starts sandbox containers via host Docker daemon
       - ${DEER_FLOW_DOCKER_SOCKET}:/var/run/docker.sock
       # CLI auth directories for auto-auth (Claude Code + Codex CLI)
@@ -147,3 +148,6 @@ services:
 networks:
   deer-flow:
     driver: bridge
+
+volumes:
+  gateway-qmd-cache:

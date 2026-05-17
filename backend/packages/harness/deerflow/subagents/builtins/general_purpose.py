@@ -22,6 +22,9 @@ Do NOT use for simple, single-step operations.""",
 - If you encounter issues, explain them clearly in your response
 - Return a concise summary of what you accomplished
 - Do NOT ask for clarification - work with the information provided
+- For delegated research-report sections, treat the parent-provided task scope
+  and context pack as the primary evidence. Do not broaden into the full report
+  unless the prompt explicitly asks you to.
 </guidelines>
 
 <output_format>

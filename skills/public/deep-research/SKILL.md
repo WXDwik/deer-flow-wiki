@@ -1,13 +1,13 @@
 ---
 name: deep-research
-description: Use this skill instead of WebSearch for ANY question requiring web research. Trigger on queries like "what is X", "explain X", "compare X and Y", "research X", or before content generation tasks. Provides systematic multi-angle research methodology instead of single superficial searches. Use this proactively when the user's question needs online information.
+description: Use this skill for deep research reports and systematic research across web sources, local LLM Wiki knowledge bases, or both. Trigger on queries like "what is X", "explain X", "compare X and Y", "research X", "generate a report", or wiki-grounded research requests. Provides multi-angle research and subagent orchestration methodology instead of single superficial searches.
 ---
 
 # Deep Research Skill
 
 ## Overview
 
-This skill provides a systematic methodology for conducting thorough web research. **Load this skill BEFORE starting any content generation task** to ensure you gather sufficient information from multiple angles, depths, and sources.
+This skill provides a systematic methodology for conducting thorough research with DeerFlow. **Load this skill BEFORE starting any research report or content generation task** to ensure you gather sufficient information from multiple angles, depths, and sources.
 
 ## When to Use This Skill
 
@@ -26,11 +26,43 @@ This skill provides a systematic methodology for conducting thorough web researc
 - Producing videos or multimedia content
 - Any content that requires real-world information, examples, or current data
 
+### Wiki-Grounded Research
+- User asks to generate a report from an LLM Wiki or knowledge base
+- User provides a wiki name/path and asks for a deep research report
+- The task needs both current web evidence and existing local wiki knowledge
+- The report should reuse curated local sources rather than starting only from web search
+
 ## Core Principle
 
-**Never generate content based solely on general knowledge.** The quality of your output directly depends on the quality and quantity of research conducted beforehand. A single search query is NEVER enough.
+**Never generate content based solely on general knowledge.** The quality of your output directly depends on the quality and quantity of research conducted beforehand. A single search query is NEVER enough. When an LLM Wiki is available, treat it as a first-class local knowledge source alongside web search.
+
+## DeerFlow Deep Research Orchestration
+
+For complex research reports, the lead agent owns planning and final synthesis. Subagents own isolated section-level research tasks.
+
+Recommended flow:
+
+1. **Classify the task**: Decide whether this is a deep research report, a lighter answer, a literature review, a technical report, or a comparison.
+2. **Map evidence sources**: Decide what must come from web search/fetch and what should come from local wiki knowledge.
+3. **Inspect wiki knowledge if available**: Call `wiki_plan_report` with the report goal and wiki name/path to get inventory, suggested wiki queries, and candidate pages.
+4. **Do initial broad research**: Use web search/fetch and wiki planning results to understand the topic landscape before decomposition.
+5. **Design report structure**: Decide the sections, research questions, and evidence needs for the final report.
+6. **Prepare assigned context packs**: For each section, call `wiki_get_report_context` with focused queries to build the wiki context pack for that section.
+7. **Delegate in parallel**: Use `task` to send independent section work to subagents. Include the section objective, assigned wiki context pack, relevant web findings, and output expectations in each task prompt.
+8. **Synthesize, do not concatenate**: After subagents return, the lead agent resolves overlap, contradictions, gaps, ordering, and tone, then writes the final integrated report.
+
+Subagent prompts should be narrow. Do not ask every subagent to write the full report. Assign each subagent one dimension or section, and pass only the wiki/web context relevant to that task.
 
 ## Research Methodology
+
+### Phase 0: Source Planning
+
+Before searching or delegating, decide which information channels are needed:
+
+- Use web search/fetch for current facts, recent developments, external validation, and sources not already in the wiki.
+- Use `wiki_plan_report` when the user names or implies an LLM Wiki / knowledge base.
+- Use `wiki_get_report_context` to prepare focused local evidence packs for individual report sections.
+- Use `wiki_search` only for quick targeted lookups; prefer `wiki_get_report_context` before delegating section work to subagents.
 
 ### Phase 1: Broad Exploration
 

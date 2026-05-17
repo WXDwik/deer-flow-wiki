@@ -76,7 +76,7 @@ def _pymupdf_output_too_sparse(text: str, file_path: Path) -> bool:
     return chars < 200
 
 
-def _convert_pdf_with_pymupdf4llm(file_path: Path) -> str | None:
+def _convert_pdf_with_pymupdf4llm(file_path: Path, *, image_dir: Path | None = None) -> str | None:
     """Attempt PDF conversion with pymupdf4llm.
 
     Returns the markdown text, or None if pymupdf4llm is not installed or
@@ -88,7 +88,15 @@ def _convert_pdf_with_pymupdf4llm(file_path: Path) -> str | None:
         return None
 
     try:
-        return pymupdf4llm.to_markdown(str(file_path))
+        kwargs = {}
+        if image_dir is not None:
+            image_dir.mkdir(parents=True, exist_ok=True)
+            kwargs = {
+                "write_images": True,
+                "image_path": str(image_dir),
+                "image_format": "png",
+            }
+        return pymupdf4llm.to_markdown(str(file_path), **kwargs)
     except Exception:
         logger.exception("pymupdf4llm failed to convert %s; falling back to MarkItDown", file_path.name)
         return None
@@ -102,7 +110,7 @@ def _convert_with_markitdown(file_path: Path) -> str:
     return md.convert(str(file_path)).text_content
 
 
-def _do_convert(file_path: Path, pdf_converter: str) -> str:
+def _do_convert(file_path: Path, pdf_converter: str, pdf_image_dir: Path | None = None) -> str:
     """Synchronous conversion — called directly or via asyncio.to_thread.
 
     Args:
@@ -113,7 +121,7 @@ def _do_convert(file_path: Path, pdf_converter: str) -> str:
 
     if is_pdf and pdf_converter != "markitdown":
         # Try pymupdf4llm first (auto or explicit)
-        pymupdf_text = _convert_pdf_with_pymupdf4llm(file_path)
+        pymupdf_text = _convert_pdf_with_pymupdf4llm(file_path, image_dir=pdf_image_dir)
 
         if pymupdf_text is not None:
             # pymupdf4llm is installed
@@ -135,7 +143,7 @@ def _do_convert(file_path: Path, pdf_converter: str) -> str:
     return _convert_with_markitdown(file_path)
 
 
-async def convert_file_to_markdown(file_path: Path) -> Path | None:
+async def convert_file_to_markdown(file_path: Path, *, output_dir: Path | None = None, pdf_image_dir: Path | None = None) -> Path | None:
     """Convert a supported document file to Markdown.
 
     PDF files are handled with a two-converter strategy (see module docstring).
@@ -153,11 +161,12 @@ async def convert_file_to_markdown(file_path: Path) -> Path | None:
         file_size = file_path.stat().st_size
 
         if file_size > _ASYNC_THRESHOLD_BYTES:
-            text = await asyncio.to_thread(_do_convert, file_path, pdf_converter)
+            text = await asyncio.to_thread(_do_convert, file_path, pdf_converter, pdf_image_dir)
         else:
-            text = _do_convert(file_path, pdf_converter)
+            text = _do_convert(file_path, pdf_converter, pdf_image_dir)
 
-        md_path = file_path.with_suffix(".md")
+        md_path = (output_dir / file_path.with_suffix(".md").name) if output_dir is not None else file_path.with_suffix(".md")
+        md_path.parent.mkdir(parents=True, exist_ok=True)
         md_path.write_text(text, encoding="utf-8")
 
         logger.info("Converted %s to markdown: %s (%d chars)", file_path.name, md_path.name, len(text))

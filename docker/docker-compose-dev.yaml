@@ -135,6 +135,7 @@ services:
       - ../extensions_config.json:/app/extensions_config.json
       - ../skills:/app/skills
       - ../logs:/app/logs
+      - gateway-qmd-cache:/root/.cache/qmd
       # Use a Docker-managed uv cache volume instead of a host bind mount.
       # On macOS/Docker Desktop, uv may fail to create symlinks inside shared
       # host directories, which causes startup-time `uv sync` to crash.
@@ -178,6 +179,7 @@ volumes:
   # image build are not shadowed by the host backend/ directory mount.
   gateway-venv:
   gateway-uv-cache:
+  gateway-qmd-cache:
 
 networks:
   deer-flow-dev:
