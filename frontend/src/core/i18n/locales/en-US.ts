@@ -115,6 +115,11 @@ export const enUS: Translations = {
       "You already have text in the input. Choose how to send it.",
     followupConfirmAppend: "Append & send",
     followupConfirmReplace: "Replace & send",
+    ultraSuggestTitle: "Switch to Ultra?",
+    ultraSuggestDescription:
+      "This looks like a deep research report. Ultra enables subagents to divide the work, which is better for complex multi-step research.",
+    ultraSuggestContinue: "Continue current mode",
+    ultraSuggestSwitch: "Switch to Ultra & send",
     suggestions: [
       {
         suggestion: "Write",

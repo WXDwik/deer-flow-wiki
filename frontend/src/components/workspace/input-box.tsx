@@ -86,6 +86,26 @@ import { Tooltip } from "./tooltip";
 
 type InputMode = "flash" | "thinking" | "pro" | "ultra";
 
+const DEEP_RESEARCH_ULTRA_PATTERNS = [
+  /深度研究/i,
+  /研究报告/i,
+  /深度报告/i,
+  /多章节/i,
+  /子\s*agent/i,
+  /子代理/i,
+  /并行研究/i,
+  /deep\s+research/i,
+  /research\s+report/i,
+  /subagent/i,
+  /sub-agent/i,
+  /multi-section\s+report/i,
+  /parallel\s+research/i,
+];
+
+function shouldSuggestUltraForDeepResearch(text: string): boolean {
+  return DEEP_RESEARCH_ULTRA_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 function getResolvedMode(
   mode: InputMode | undefined,
   supportsThinking: boolean,
@@ -161,6 +181,9 @@ export function InputBox({
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(
     null,
   );
+  const [ultraConfirmOpen, setUltraConfirmOpen] = useState(false);
+  const [pendingUltraMessage, setPendingUltraMessage] =
+    useState<PromptInputMessage | null>(null);
 
   useEffect(() => {
     if (models.length === 0) {
@@ -275,6 +298,15 @@ export function InputBox({
         return;
       }
 
+      if (
+        context.mode !== "ultra" &&
+        shouldSuggestUltraForDeepResearch(message.text)
+      ) {
+        setPendingUltraMessage(message);
+        setUltraConfirmOpen(true);
+        return;
+      }
+
       onSubmit?.(message);
     },
     [
@@ -287,6 +319,34 @@ export function InputBox({
       status,
     ],
   );
+
+  const cancelUltraSuggestion = useCallback(() => {
+    setUltraConfirmOpen(false);
+    setPendingUltraMessage(null);
+  }, []);
+
+  const continueWithoutUltra = useCallback(() => {
+    const message = pendingUltraMessage;
+    setUltraConfirmOpen(false);
+    setPendingUltraMessage(null);
+    if (message) {
+      onSubmit?.(message);
+    }
+  }, [onSubmit, pendingUltraMessage]);
+
+  const switchToUltraAndSend = useCallback(() => {
+    const message = pendingUltraMessage;
+    setUltraConfirmOpen(false);
+    setPendingUltraMessage(null);
+    onContextChange?.({
+      ...context,
+      mode: "ultra",
+      reasoning_effort: "high",
+    });
+    if (message) {
+      setTimeout(() => onSubmit?.(message), 0);
+    }
+  }, [context, onContextChange, onSubmit, pendingUltraMessage]);
 
   const requestFormSubmit = useCallback(() => {
     const form = promptRootRef.current?.querySelector("form");
@@ -874,6 +934,28 @@ export function InputBox({
             </Button>
             <Button onClick={confirmReplaceAndSend}>
               {t.inputBox.followupConfirmReplace}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ultraConfirmOpen} onOpenChange={setUltraConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.inputBox.ultraSuggestTitle}</DialogTitle>
+            <DialogDescription>
+              {t.inputBox.ultraSuggestDescription}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelUltraSuggestion}>
+              {t.common.cancel}
+            </Button>
+            <Button variant="secondary" onClick={continueWithoutUltra}>
+              {t.inputBox.ultraSuggestContinue}
+            </Button>
+            <Button onClick={switchToUltraAndSend}>
+              {t.inputBox.ultraSuggestSwitch}
             </Button>
           </DialogFooter>
         </DialogContent>

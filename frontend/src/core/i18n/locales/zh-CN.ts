@@ -110,6 +110,11 @@ export const zhCN: Translations = {
     followupConfirmDescription: "当前输入框已有内容，选择发送方式。",
     followupConfirmAppend: "追加并发送",
     followupConfirmReplace: "替换并发送",
+    ultraSuggestTitle: "建议切换到 Ultra？",
+    ultraSuggestDescription:
+      "这个任务看起来需要深度研究报告。Ultra 会启用子代理分工协作，更适合复杂多步骤研究。",
+    ultraSuggestContinue: "继续当前模式",
+    ultraSuggestSwitch: "切换 Ultra 并发送",
     suggestions: [
       {
         suggestion: "写作",
