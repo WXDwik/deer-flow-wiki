@@ -60,6 +60,8 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     prompt = model.invoke.call_args.args[0]
     assert "Treat schema.md" in prompt
     assert "schema_version: 1" in prompt
+    assert "[[lite-transformer-for-uad]]" in prompt
+    assert "[[Lite Transformer for UAD]]" in prompt
 
     source_summary = paths.wiki_sources_dir / "paper.md"
     concept_page = paths.wiki_concepts_dir / "retrieval-augmented-generation.md"

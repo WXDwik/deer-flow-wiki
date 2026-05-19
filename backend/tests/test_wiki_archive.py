@@ -108,7 +108,7 @@ def test_archive_answer_auto_archive_creates_page_updates_index_and_log(tmp_path
     assert result.archive_applied is True
     assert result.archived_page is not None
     assert result.archived_page.path == "wiki/queries/rag-definition.md"
-    assert "[[RAG definition]]" in paths.wiki_index_file.read_text(encoding="utf-8")
+    assert "[[rag-definition]]" in paths.wiki_index_file.read_text(encoding="utf-8")
     assert "query-archive" in paths.wiki_log_file.read_text(encoding="utf-8")
 
     index = WikiRepository(paths).read_index()

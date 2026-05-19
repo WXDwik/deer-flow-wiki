@@ -130,11 +130,14 @@ LLM 生成页面正文时不要再次生成 YAML frontmatter，也不要重复�
 
 ## 链接规则
 
-页面之间使用 Obsidian 风格链接：
+页面之间使用 Obsidian 风格链接，链接目标必须是目标 Markdown 文件名去掉 `.md` 后的 lowercase kebab-case slug：
 
 ```markdown
-[[页面标题]]
+[[page-slug]]
 ```
+
+示例：目标文件 `wiki/entities/lite-transformer-for-uad.md` 必须写作 `[[lite-transformer-for-uad]]`。
+不要使用页面标题自造链接，例如不要写 `[[Lite Transformer for UAD]]`。
 
 ## 溯源规则
 
@@ -201,7 +204,10 @@ status: active
 
 # LLM Wiki Schema
 
-This file is the maintenance contract for this wiki. The LLM must read and follow it when ingesting sources, answering queries, archiving answers, repairing lint issues, and evolving the schema. The schema may evolve, and the evolved version becomes the rule source for future wiki updates.
+This file is the maintenance contract for this wiki. The LLM must read and
+follow it when ingesting sources, answering queries, archiving answers,
+repairing lint issues, and evolving the schema. The schema may evolve, and the
+evolved version becomes the rule source for future wiki updates.
 
 ## Purpose
 
@@ -260,15 +266,23 @@ When generating page body content, do not include YAML frontmatter or a duplicat
 
 ## Link Rules
 
-Use Obsidian-style links between pages:
+Use Obsidian-style links between pages. The link target must be the lowercase
+kebab-case slug from the target Markdown filename without `.md`:
 
 ```markdown
-[[Page Title]]
+[[page-slug]]
 ```
+
+Example: target file `wiki/entities/lite-transformer-for-uad.md` must be linked
+as `[[lite-transformer-for-uad]]`.
+Do not invent links from page titles, for example do not write `[[Lite Transformer for UAD]]`.
 
 ## Source Traceability
 
-Pages generated from source material must record their sources. Source summary pages record raw source paths. Concept, entity, comparison, synthesis, and query pages record supporting source IDs and should link to related source summary pages when useful.
+Pages generated from source material must record their sources. Source summary
+pages record raw source paths. Concept, entity, comparison, synthesis, and query
+pages record supporting source IDs and should link to related source summary
+pages when useful.
 
 If sources conflict, preserve and explain the disagreement instead of inventing certainty.
 

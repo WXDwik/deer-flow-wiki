@@ -31,6 +31,17 @@ def test_structural_lint_detects_orphan_no_outlinks_and_broken_links(tmp_path: P
     assert all(issue.page not in {"index.md", "log.md"} for issue in issues)
 
 
+def test_structural_lint_resolves_slug_wikilinks(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    _write(paths.wiki_entities_dir / "heterogeneous-transformer-ht.md", "# Heterogeneous Transformer (HT)\n")
+    _write(paths.wiki_concepts_dir / "activity-detection.md", "Links to [[heterogeneous-transformer-ht]].")
+
+    issues = structural_lint_wiki(paths)
+
+    broken = [issue for issue in issues if issue.type == "broken-link"]
+    assert broken == []
+
+
 def test_parse_semantic_lint_output_returns_unified_results() -> None:
     text = """---LINT: contradiction | warning | Conflicting definition of RAG---
 Two pages describe RAG differently.

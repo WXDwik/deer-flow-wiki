@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 
 from deerflow.models import create_chat_model
 from deerflow.wiki.lint import LintIssue, lint_wiki, resolve_lint_mode
-from deerflow.wiki.paths import WikiPaths
+from deerflow.wiki.paths import WikiPaths, slugify_name
 
 _MAX_FILE_CHARS = 12_000
 _MAX_TOTAL_CONTEXT_CHARS = 60_000
@@ -85,6 +86,69 @@ def _repair_action(issue: dict) -> str:
             return "add_or_link_missing_concept_page"
         return "improve_semantic_quality"
     return "repair_markdown"
+
+
+def _broken_link_target(issue: dict) -> str | None:
+    if issue.get("type") != "broken-link":
+        return None
+    detail = str(issue.get("detail") or "")
+    match = re.search(r"Broken link:\s*\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", detail)
+    return match.group(1).strip() if match else None
+
+
+def _existing_page_slugs(paths: WikiPaths) -> set[str]:
+    return {path.stem for path in paths.wiki_dir.rglob("*.md") if path.is_file()}
+
+
+def _deterministic_slug_link_repairs(paths: WikiPaths, issues: list[dict]) -> tuple[list[dict[str, str]], list[dict]]:
+    slugs = _existing_page_slugs(paths)
+    remaining: list[dict] = []
+    originals: dict[Path, str] = {}
+    repaired_by_path: dict[Path, str] = {}
+
+    for issue in issues:
+        target = _broken_link_target(issue)
+        page = str(issue.get("page") or "")
+        page_path = _root_relative_markdown_path(paths, page)
+        if target is None or page_path is None:
+            remaining.append(issue)
+            continue
+
+        try:
+            slug = slugify_name(target)
+        except ValueError:
+            remaining.append(issue)
+            continue
+
+        if slug not in slugs:
+            remaining.append(issue)
+            continue
+
+        current = repaired_by_path.get(page_path)
+        if current is None:
+            current = page_path.read_text(encoding="utf-8", errors="ignore") if page_path.exists() else ""
+            originals[page_path] = current
+        pattern = re.compile(r"\[\[\s*" + re.escape(target) + r"\s*(?:\|[^\]]+)?\]\]")
+        repaired = pattern.sub(f"[[{slug}]]", current)
+        if repaired == current:
+            remaining.append(issue)
+            continue
+
+        repaired_by_path[page_path] = repaired
+
+    changes = [
+        {
+            "path": page_path.relative_to(paths.root).as_posix(),
+            "operation": "replace",
+            "reason": "Replace title-style wikilinks with canonical page slugs.",
+            "old": originals[page_path],
+            "new": repaired,
+        }
+        for page_path, repaired in repaired_by_path.items()
+        if repaired != originals[page_path]
+    ]
+
+    return changes, remaining
 
 
 def build_repair_instructions(paths: WikiPaths, issues: list[LintIssue | dict]) -> list[dict[str, Any]]:
@@ -182,6 +246,10 @@ Hard constraints:
 - Follow schema.md from the available file context as the active wiki contract.
 - Preserve source-grounded nuance. If sources conflict, document the disagreement instead of inventing certainty.
 - Do not add unrelated content just to satisfy lint.
+- Wikilinks must target lowercase kebab-case page slugs matching Markdown
+  filenames without .md. Prefer [[page-slug]] and do not write [[Page Title]].
+- For broken links, if a slugified target page exists, replace the link with
+  that slug. Create pages only for genuinely missing, source-supported topics.
 
 Return ONLY valid JSON:
 {{
@@ -312,19 +380,28 @@ def repair_lint(
             "post_lint": None,
         }
 
-    instructions = build_repair_instructions(paths, lint_issues)
-    context = _read_context(paths, instructions)
-    model = create_chat_model(name=model_name, thinking_enabled=False)
-    response = model.invoke(_repair_prompt(paths, instructions, context), config={"run_name": "wiki_lint_repair"})
-    content = getattr(response, "content", response)
-    if isinstance(content, list):
-        content = "\n".join(str(item) for item in content)
-    data = _json_from_model_text(str(content))
-    if data is None:
-        raise ValueError("Repair model did not return valid JSON")
+    deterministic_changes, remaining_issues = _deterministic_slug_link_repairs(paths, issue_dicts)
+    model_changes: list[dict[str, str]] = []
+    summary_parts: list[str] = []
+    if deterministic_changes:
+        summary_parts.append("Replaced title-style wikilinks with canonical page slugs.")
 
-    changes = _validate_model_changes(paths, data)
-    summary = str(data.get("summary") or "Applied lint repair.")
+    if remaining_issues:
+        instructions = build_repair_instructions(paths, remaining_issues)
+        context = _read_context(paths, instructions)
+        model = create_chat_model(name=model_name, thinking_enabled=False)
+        response = model.invoke(_repair_prompt(paths, instructions, context), config={"run_name": "wiki_lint_repair"})
+        content = getattr(response, "content", response)
+        if isinstance(content, list):
+            content = "\n".join(str(item) for item in content)
+        data = _json_from_model_text(str(content))
+        if data is None:
+            raise ValueError("Repair model did not return valid JSON")
+        model_changes = _validate_model_changes(paths, data)
+        summary_parts.append(str(data.get("summary") or "Applied lint repair."))
+
+    changes = deterministic_changes + model_changes
+    summary = " ".join(summary_parts) or "Applied lint repair."
     if not dry_run:
         for change in changes:
             _apply_change(paths, change)

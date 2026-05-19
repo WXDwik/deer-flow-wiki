@@ -213,7 +213,7 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
       "title": "Page title",
       "source_ids": ["source ids that support this page"],
       "tags": ["short-tag"],
-      "content": "Markdown body. Use Obsidian wikilinks when useful."
+      "content": "Markdown body. Use slug wikilinks like [[page-slug]] when useful."
     }}
   ]
 }}
@@ -230,6 +230,10 @@ Rules:
 - For a page supported by multiple sources, include all relevant source_ids.
 - Page content must be Markdown body only: no YAML frontmatter and no duplicate
   top-level # title.
+- Wikilinks must target lowercase kebab-case page slugs, matching the target
+  Markdown filename without .md. Use [[lite-transformer-for-uad]], not
+  [[Lite Transformer for UAD]].
+- Only link to pages that already exist or pages returned in this JSON response.
 - Do not invent facts.
 
 Wiki context:

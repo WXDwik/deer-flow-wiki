@@ -205,8 +205,9 @@ def build_archive_page(
     prompt = f"""Turn this answer into a concise wiki page.
 
 The page should be useful when read later outside the original chat. Condense,
-structure, and preserve source references as wikilinks or page paths. Do not add
-unsupported facts.
+structure, and preserve source references as slug wikilinks or page paths. Do
+not add unsupported facts. Wikilinks must target lowercase kebab-case page slugs
+matching Markdown filenames without .md, for example [[rag]], not [[RAG]].
 
 Follow the active schema.md contract below. Return Markdown body only: no YAML
 frontmatter and no duplicate top-level title.
@@ -340,6 +341,8 @@ def build_existing_page_updates(
 Use small, precise edits. Prefer append for adding a short note or link. Use
 replace only when old text is an exact substring. Avoid full rewrite unless the
 target page is very small and clearly needs it.
+When adding wikilinks, use lowercase kebab-case page slugs matching Markdown
+filenames without .md; do not write page-title wikilinks.
 
 Follow the active schema.md contract below:
 {schema_context(paths)}
@@ -437,7 +440,7 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
         "entity": "## Entities",
         "source": "## Sources",
     }.get(archived_page.page_type, "## Queries")
-    link = f"- [[{archived_page.title}]]"
+    link = f"- [[{Path(archived_page.path).stem}]]"
     if link in current:
         return
     if section in current:

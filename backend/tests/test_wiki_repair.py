@@ -83,6 +83,34 @@ def test_repair_lint_dry_run_returns_changes_without_writing(tmp_path: Path) -> 
     assert result["post_lint"] is None
 
 
+def test_repair_lint_replaces_title_wikilink_with_existing_slug(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    page = paths.wiki_concepts_dir / "activity-detection.md"
+    target = paths.wiki_entities_dir / "heterogeneous-transformer-ht.md"
+    _write(page, "Broken [[Heterogeneous Transformer (HT)]].")
+    _write(target, "# Heterogeneous Transformer (HT)\n")
+
+    with patch("deerflow.wiki.repair.create_chat_model") as factory:
+        result = repair_lint(
+            paths,
+            dry_run=False,
+            issues=[
+                {
+                    "type": "broken-link",
+                    "severity": "warning",
+                    "page": "concepts/activity-detection.md",
+                    "detail": "Broken link: [[Heterogeneous Transformer (HT)]] - target page not found.",
+                    "affectedPages": [],
+                }
+            ],
+        )
+
+    factory.assert_not_called()
+    assert page.read_text(encoding="utf-8") == "Broken [[heterogeneous-transformer-ht]]."
+    assert result["repair"]["changes"][0]["new_preview"] == "Broken [[heterogeneous-transformer-ht]]."
+    assert result["post_lint"] is not None
+
+
 def test_repair_lint_writes_markdown_and_verifies(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
     page = paths.wiki_concepts_dir / "rag.md"
