@@ -31,6 +31,35 @@ function injectCsrfHeader(_url: URL, init: RequestInit): RequestInit {
   return { ...init, headers };
 }
 
+export function isRunNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const status = Reflect.get(error, "status");
+  return (
+    status === 404 &&
+    error.message.startsWith("HTTP 404:") &&
+    /Run [0-9a-f-]+ not found/.test(error.message)
+  );
+}
+
+async function* swallowMissingRunStream<T>(
+  stream: AsyncIterable<T>,
+  threadId: string | null | undefined,
+): AsyncGenerator<T> {
+  try {
+    yield* stream;
+  } catch (error) {
+    if (!isRunNotFoundError(error)) {
+      throw error;
+    }
+    if (typeof window !== "undefined" && threadId) {
+      window.sessionStorage.removeItem(`lg:stream:${threadId}`);
+    }
+  }
+}
+
 function createCompatibleClient(isMock?: boolean): LangGraphClient {
   const apiUrl = getLangGraphBaseURL(isMock);
   console.log(`Creating API client with base URL: ${apiUrl}`);
@@ -49,10 +78,9 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
 
   const originalJoinStream = client.runs.joinStream.bind(client.runs);
   client.runs.joinStream = ((threadId, runId, options) =>
-    originalJoinStream(
+    swallowMissingRunStream(
+      originalJoinStream(threadId, runId, sanitizeRunStreamOptions(options)),
       threadId,
-      runId,
-      sanitizeRunStreamOptions(options),
     )) as typeof client.runs.joinStream;
 
   return client;
