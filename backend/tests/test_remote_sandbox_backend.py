@@ -141,10 +141,11 @@ def test_create_delegates_to_provisioner_create(monkeypatch):
 
 def test_provisioner_create_returns_sandbox_info(monkeypatch):
     backend = RemoteSandboxBackend("http://provisioner:8002")
+    monkeypatch.setattr("deerflow.community.aio_sandbox.remote_backend.get_effective_user_id", lambda: "alice")
 
     def mock_post(url: str, json: dict, timeout: int):
         assert url == "http://provisioner:8002/api/sandboxes"
-        assert json == {"sandbox_id": "abc123", "thread_id": "thread-1"}
+        assert json == {"sandbox_id": "abc123", "thread_id": "thread-1", "user_id": "alice"}
         assert timeout == 30
         return _StubResponse(payload={"sandbox_id": "abc123", "sandbox_url": "http://k3s:31001"})
 

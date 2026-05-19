@@ -16,7 +16,6 @@ from deerflow.wiki.markdown import extract_wikilinks
 from deerflow.wiki.paths import WikiPaths
 from deerflow.wiki.schema import schema_context
 
-
 LintType = str
 Severity = str
 LintMode = Literal["light", "deep"]
@@ -238,9 +237,9 @@ def parse_semantic_lint_output(text: str) -> list[LintIssue]:
     return issues
 
 
-def semantic_lint_wiki(paths: WikiPaths) -> list[LintIssue]:
+def semantic_lint_wiki(paths: WikiPaths, *, model_name: str | None = None) -> list[LintIssue]:
     """Run LLM-based semantic wiki quality checks."""
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     response = model.invoke(_semantic_prompt(paths), config={"run_name": "wiki_semantic_lint"})
     content = getattr(response, "content", response)
     if isinstance(content, list):
@@ -254,10 +253,14 @@ def lint_wiki(
     mode: str = "light",
     trigger: str | None = None,
     include_semantic: bool | None = None,
+    model_name: str | None = None,
 ) -> list[LintIssue]:
     """Run wiki lint checks."""
     lint_mode = resolve_lint_mode(mode=mode, trigger=trigger, include_semantic=include_semantic)
     issues = structural_lint_wiki(paths)
     if lint_mode == "deep":
-        issues.extend(semantic_lint_wiki(paths))
+        if model_name is None:
+            issues.extend(semantic_lint_wiki(paths))
+        else:
+            issues.extend(semantic_lint_wiki(paths, model_name=model_name))
     return issues

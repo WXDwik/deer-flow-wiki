@@ -30,7 +30,6 @@ from deerflow.wiki.paths import (
 )
 from deerflow.wiki.repository import WikiRepository
 
-
 _MAX_LLM_MARKDOWN_CHARS = 40_000
 _MAX_BATCH_LLM_MARKDOWN_CHARS = 120_000
 _PAGE_TYPE_PATHS = {
@@ -186,7 +185,7 @@ cached_markdown_path: {item.cached_markdown.relative_to(paths.root).as_posix()}
     return "\n\n".join(sections)
 
 
-def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[PreparedSource]) -> dict[str, Any]:
+def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[PreparedSource], *, model_name: str | None = None) -> dict[str, Any]:
     """Ask the configured chat model to summarize and classify a batch of sources together."""
     source_manifest = [
         {
@@ -242,7 +241,7 @@ Imported source manifest:
 Imported sources:
 {_source_markdown_sections(paths, prepared_sources)}
 """
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     response = model.invoke(prompt, config={"run_name": "wiki_ingest"})
     content = getattr(response, "content", response)
     if isinstance(content, list):
@@ -253,9 +252,9 @@ Imported sources:
     return data
 
 
-def generate_wiki_content(paths: WikiPaths, source: RawSource, cached_markdown: Path) -> dict[str, Any]:
+def generate_wiki_content(paths: WikiPaths, source: RawSource, cached_markdown: Path, *, model_name: str | None = None) -> dict[str, Any]:
     """Ask the configured chat model to summarize and classify one cached source."""
-    return generate_wiki_batch_content(paths, [PreparedSource(source=source, cached_markdown=cached_markdown)])
+    return generate_wiki_batch_content(paths, [PreparedSource(source=source, cached_markdown=cached_markdown)], model_name=model_name)
 
 
 def _fallback_wiki_content(source: RawSource, cached_markdown: Path) -> dict[str, Any]:
@@ -457,7 +456,7 @@ def prepare_source(paths: WikiPaths, source_file: str | Path, now: str) -> Prepa
     return PreparedSource(source=source, cached_markdown=cached_markdown)
 
 
-def ingest_files(paths: WikiPaths, source_files: list[str | Path]) -> list[RawSource]:
+def ingest_files(paths: WikiPaths, source_files: list[str | Path], *, model_name: str | None = None) -> list[RawSource]:
     """Import a batch of files and generate wiki pages from their combined content."""
     if not source_files:
         raise ValueError("source_files cannot be empty")
@@ -465,7 +464,7 @@ def ingest_files(paths: WikiPaths, source_files: list[str | Path]) -> list[RawSo
     now = datetime.now(UTC).isoformat()
     prepared_sources = [prepare_source(paths, source_file, now) for source_file in source_files]
     try:
-        generated = generate_wiki_batch_content(paths, prepared_sources)
+        generated = generate_wiki_batch_content(paths, prepared_sources, model_name=model_name)
         ingest_mode = "llm_batch" if len(prepared_sources) > 1 else "llm"
     except Exception as exc:
         generated = _fallback_wiki_batch_content(prepared_sources)
@@ -497,6 +496,6 @@ def ingest_files(paths: WikiPaths, source_files: list[str | Path]) -> list[RawSo
     return sources
 
 
-def ingest_file(paths: WikiPaths, source_file: str | Path) -> RawSource:
+def ingest_file(paths: WikiPaths, source_file: str | Path, *, model_name: str | None = None) -> RawSource:
     """Import one file, cache Markdown, and generate wiki pages."""
-    return ingest_files(paths, [source_file])[0]
+    return ingest_files(paths, [source_file], model_name=model_name)[0]

@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from deerflow.tools.builtins.wiki_tools import WIKI_TOOLS, _resolve_source_file
+from deerflow.config.paths import Paths
+from deerflow.tools.builtins.wiki_tools import WIKI_TOOLS, _get_runtime_model_name, _resolve_source_file, _resolve_wiki_name_or_path
 
 
 def test_resolve_source_file_maps_virtual_uploads_path_with_spaces(tmp_path: Path) -> None:
@@ -41,6 +42,77 @@ def test_resolve_source_file_accepts_quoted_uploaded_filename(tmp_path: Path) ->
     resolved = _resolve_source_file(runtime, "'paper with spaces.pdf'")
 
     assert resolved == source_file.resolve()
+
+
+def test_resolve_wiki_name_maps_plain_name_to_user_wiki_dir(tmp_path: Path, monkeypatch) -> None:
+    outputs_dir = tmp_path / "outputs"
+    paths = Paths(base_dir=tmp_path)
+    monkeypatch.setattr("deerflow.tools.builtins.wiki_tools.get_paths", lambda: paths)
+
+    runtime = SimpleNamespace(
+        context=None,
+        config={"configurable": {"thread_id": "thread-1"}},
+        state={"thread_data": {"outputs_path": str(outputs_dir)}},
+    )
+
+    resolved = _resolve_wiki_name_or_path(runtime, "Research Wiki")
+
+    assert Path(resolved) == (tmp_path / "users" / "test-user-autouse" / "wiki" / "research-wiki").resolve()
+
+
+def test_resolve_wiki_name_is_shared_across_threads_for_same_user(tmp_path: Path, monkeypatch) -> None:
+    paths = Paths(base_dir=tmp_path)
+    monkeypatch.setattr("deerflow.tools.builtins.wiki_tools.get_paths", lambda: paths)
+
+    runtime_one = SimpleNamespace(
+        context=None,
+        config={"configurable": {"thread_id": "thread-1"}},
+        state={"thread_data": {"outputs_path": str(tmp_path / "thread-1" / "outputs")}},
+    )
+    runtime_two = SimpleNamespace(
+        context=None,
+        config={"configurable": {"thread_id": "thread-2"}},
+        state={"thread_data": {"outputs_path": str(tmp_path / "thread-2" / "outputs")}},
+    )
+
+    assert _resolve_wiki_name_or_path(runtime_one, "Research Wiki") == _resolve_wiki_name_or_path(runtime_two, "Research Wiki")
+
+
+def test_resolve_wiki_name_keeps_explicit_path(tmp_path: Path, monkeypatch) -> None:
+    outputs_dir = tmp_path / "outputs"
+    explicit_path = tmp_path / "external-wiki"
+    paths = Paths(base_dir=tmp_path)
+    monkeypatch.setattr("deerflow.tools.builtins.wiki_tools.get_paths", lambda: paths)
+
+    runtime = SimpleNamespace(
+        context=None,
+        config={"configurable": {"thread_id": "thread-1"}},
+        state={"thread_data": {"outputs_path": str(outputs_dir)}},
+    )
+
+    resolved = _resolve_wiki_name_or_path(runtime, str(explicit_path))
+
+    assert Path(resolved) == explicit_path.resolve()
+
+
+def test_get_runtime_model_name_prefers_context() -> None:
+    runtime = SimpleNamespace(
+        context={"model_name": "deepseek-v4-pro"},
+        config={"metadata": {"model_name": "qwen3.6-flash"}},
+        state={},
+    )
+
+    assert _get_runtime_model_name(runtime) == "deepseek-v4-pro"
+
+
+def test_get_runtime_model_name_uses_metadata() -> None:
+    runtime = SimpleNamespace(
+        context=None,
+        config={"metadata": {"model_name": "deepseek-v4-flash"}},
+        state={},
+    )
+
+    assert _get_runtime_model_name(runtime) == "deepseek-v4-flash"
 
 
 def test_wiki_tools_include_source_status_tool() -> None:

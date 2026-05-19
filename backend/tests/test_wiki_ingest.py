@@ -132,6 +132,20 @@ def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None
     assert len(comparison_pages[0]["sources"]) == 2
 
 
+def test_ingest_files_passes_model_name_to_chat_factory(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "paper.md"
+    source_file.write_text("# Paper\n\nMethod content.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=json.dumps({"source_summary": "Summary.", "tags": [], "pages": []}))
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model) as factory:
+        ingest_files(paths, [source_file], model_name="deepseek-v4-pro")
+
+    factory.assert_called_once_with(name="deepseek-v4-pro", thinking_enabled=False)
+
+
 def test_add_source_returns_light_lint_result(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
     source_file = tmp_path / "notes.md"
@@ -210,6 +224,18 @@ def test_add_sources_returns_batch_lint_result(tmp_path: Path) -> None:
     assert result["metadata"]["lint"]["mode"] == "light"
     assert result["metadata"]["lint"]["trigger"] == "batch_ingest"
     assert all(source["metadata"]["lint"]["trigger"] == "batch_ingest" for source in result["sources"])
+
+
+def test_add_sources_passes_model_name_to_ingest(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    first = tmp_path / "first.md"
+    first.write_text("# First\n\nImportant local content.", encoding="utf-8")
+
+    with patch("deerflow.wiki.service.ingest_files", return_value=[]) as ingest:
+        result = add_sources(str(paths.root), [first], model_name="deepseek-v4-pro")
+
+    ingest.assert_called_once_with(paths, [first], model_name="deepseek-v4-pro")
+    assert result["source_count"] == 0
 
 
 def test_add_sources_appends_batch_operation_log(tmp_path: Path) -> None:

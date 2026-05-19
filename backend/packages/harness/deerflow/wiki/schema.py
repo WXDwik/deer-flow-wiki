@@ -17,7 +17,6 @@ from deerflow.models import create_chat_model
 from deerflow.wiki.paths import WikiPaths
 from deerflow.wiki.repository import WikiRepository
 
-
 _SCHEMA_VERSION_RE = re.compile(r"^\s*schema_version\s*:\s*[\"']?(\d+)[\"']?\s*$", re.MULTILINE)
 _MAX_CONTEXT_CHARS = 24_000
 
@@ -160,6 +159,7 @@ def evolve_schema(
     change_request: str,
     evidence: list[str] | None = None,
     dry_run: bool = True,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Propose or apply a controlled schema.md evolution."""
     if not change_request.strip():
@@ -167,7 +167,7 @@ def evolve_schema(
 
     current = read_schema_contract(paths)
     next_version = current.version + 1
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     response = model.invoke(
         _evolution_prompt(paths, change_request, evidence or [], next_version),
         config={"run_name": "wiki_schema_evolution"},

@@ -7,6 +7,7 @@ from deerflow.config.runtime_paths import runtime_home
 
 # Virtual path prefix seen by agents inside the sandbox
 VIRTUAL_PATH_PREFIX = "/mnt/user-data"
+VIRTUAL_USER_WIKI_PREFIX = "/mnt/user-wiki"
 
 _SAFE_THREAD_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 _SAFE_USER_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
@@ -160,6 +161,17 @@ class Paths:
         """Per-user root for that user's custom agents: `{base_dir}/users/{user_id}/agents/`."""
         return self.user_dir(user_id) / "agents"
 
+    def user_wiki_dir(self, user_id: str) -> Path:
+        """Per-user root for that user's shared LLM Wiki databases: `{base_dir}/users/{user_id}/wiki/`."""
+        return self.user_dir(user_id) / "wiki"
+
+    def ensure_user_wiki_dir(self, user_id: str) -> Path:
+        """Create and return the per-user shared LLM Wiki root."""
+        wiki_dir = self.user_wiki_dir(user_id)
+        wiki_dir.mkdir(parents=True, exist_ok=True)
+        wiki_dir.chmod(0o777)
+        return wiki_dir
+
     def user_agent_dir(self, user_id: str, agent_name: str) -> Path:
         """Per-user per-agent directory: `{base_dir}/users/{user_id}/agents/{name}/`."""
         return self.user_agents_dir(user_id) / agent_name.lower()
@@ -256,6 +268,10 @@ class Paths:
     def host_acp_workspace_dir(self, thread_id: str, *, user_id: str | None = None) -> str:
         """Host path for the ACP workspace mount source."""
         return _join_host_path(self.host_thread_dir(thread_id, user_id=user_id), "acp-workspace")
+
+    def host_user_wiki_dir(self, user_id: str) -> str:
+        """Host path for the per-user shared wiki mount source."""
+        return _join_host_path(self._host_base_dir_str(), "users", _validate_user_id(user_id), "wiki")
 
     def ensure_thread_dirs(self, thread_id: str, *, user_id: str | None = None) -> None:
         """Create all standard sandbox directories for a thread.

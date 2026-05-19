@@ -18,6 +18,7 @@ from deerflow.config.paths import VIRTUAL_PATH_PREFIX, get_paths
 from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.wiki import service
 from deerflow.wiki.lint import resolve_lint_mode
+from deerflow.wiki.paths import resolve_wiki_root
 
 
 def _json_result(data: object) -> str:
@@ -40,6 +41,41 @@ def _get_thread_id(runtime: ToolRuntime[ContextT, ThreadState]) -> str | None:
         return get_config().get("configurable", {}).get("thread_id")
     except RuntimeError:
         return None
+
+
+def _get_runtime_model_name(runtime: ToolRuntime[ContextT, ThreadState]) -> str | None:
+    """Resolve the model selected for the current run, if available."""
+    context = runtime.context or {}
+    model_name = context.get("model_name") or context.get("model")
+    if model_name:
+        return str(model_name)
+
+    runtime_config = getattr(runtime, "config", None) or {}
+    configurable = runtime_config.get("configurable", {})
+    model_name = configurable.get("model_name") or configurable.get("model")
+    if model_name:
+        return str(model_name)
+
+    metadata = runtime_config.get("metadata", {})
+    model_name = metadata.get("model_name") or metadata.get("model")
+    if model_name and model_name != "default":
+        return str(model_name)
+
+    try:
+        config = get_config()
+    except RuntimeError:
+        return None
+
+    configurable = config.get("configurable", {})
+    model_name = configurable.get("model_name") or configurable.get("model")
+    if model_name:
+        return str(model_name)
+
+    metadata = config.get("metadata", {})
+    model_name = metadata.get("model_name") or metadata.get("model")
+    if model_name and model_name != "default":
+        return str(model_name)
+    return None
 
 
 def _clean_source_path(source_file: str) -> str:
@@ -101,8 +137,16 @@ def _resolve_source_files(runtime: ToolRuntime[ContextT, ThreadState], source_fi
     return [_resolve_source_file(runtime, source_file) for source_file in source_files]
 
 
+def _resolve_wiki_name_or_path(runtime: ToolRuntime[ContextT, ThreadState], wiki_name_or_path: str) -> str:
+    """Resolve plain wiki names into the current user's shared wiki directory."""
+    user_id = get_effective_user_id()
+    root = resolve_wiki_root(wiki_name_or_path, base_dir=get_paths().user_wiki_dir(user_id))
+    return str(root)
+
+
 @tool("wiki_create", parse_docstring=True)
 def wiki_create_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     title: str | None = None,
     language: str = "zh-CN",
@@ -117,11 +161,12 @@ def wiki_create_tool(
     and .llm-wiki internal state files.
 
     Args:
-        wiki_name_or_path: Wiki name or filesystem path. A plain name is created under `.deer-flow/wiki/`.
+        wiki_name_or_path: Wiki name or filesystem path. A plain name is created under the current user's shared wiki directory.
         title: Optional human-readable wiki title. If omitted, the folder name is used.
         language: Initial wiki language, usually `zh-CN` or `en`.
     """
-    result = service.create_wiki(wiki_name_or_path, title=title, language=language)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.create_wiki(resolved_wiki, title=title, language=language)
     return _json_result({"ok": True, "wiki": result})
 
 
@@ -157,12 +202,18 @@ def wiki_add_source_tool(
     files = list(source_files or [])
     if source_file:
         files.append(source_file)
-    result = service.add_sources(wiki_name_or_path, _resolve_source_files(runtime, files))
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.add_sources(
+        resolved_wiki,
+        _resolve_source_files(runtime, files),
+        model_name=_get_runtime_model_name(runtime),
+    )
     return _json_result({"ok": True, **result})
 
 
 @tool("wiki_search", parse_docstring=True)
 def wiki_search_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     query: str,
     limit: int = 10,
@@ -179,12 +230,14 @@ def wiki_search_tool(
         query: Search query text.
         limit: Maximum number of results to return.
     """
-    result = service.search(wiki_name_or_path, query, limit=limit)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.search(resolved_wiki, query, limit=limit)
     return _json_result({"ok": True, "results": result})
 
 
 @tool("wiki_plan_report", parse_docstring=True)
 def wiki_plan_report_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     report_goal: str,
     report_type: str = "deep_research",
@@ -206,8 +259,9 @@ def wiki_plan_report_tool(
         max_queries: Maximum suggested wiki queries to generate.
         max_results_per_query: Maximum candidate pages to collect per query.
     """
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
     result = service.plan_report(
-        wiki_name_or_path,
+        resolved_wiki,
         report_goal,
         report_type=report_type,
         max_queries=max_queries,
@@ -218,6 +272,7 @@ def wiki_plan_report_tool(
 
 @tool("wiki_get_report_context", parse_docstring=True)
 def wiki_get_report_context_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     research_task: str,
     queries: list[str] | None = None,
@@ -239,8 +294,9 @@ def wiki_get_report_context_tool(
         max_chars_per_page: Maximum characters to include from each page.
         total_char_budget: Maximum total wiki content characters in the pack.
     """
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
     result = service.get_report_context(
-        wiki_name_or_path,
+        resolved_wiki,
         research_task,
         queries=queries,
         max_pages=max_pages,
@@ -251,7 +307,7 @@ def wiki_get_report_context_tool(
 
 
 @tool("wiki_source_status", parse_docstring=True)
-def wiki_source_status_tool(wiki_name_or_path: str) -> str:
+def wiki_source_status_tool(runtime: ToolRuntime[ContextT, ThreadState], wiki_name_or_path: str) -> str:
     """List raw source files and whether each one has already been parsed.
 
     Use this before importing a batch of files that were manually placed under
@@ -261,12 +317,13 @@ def wiki_source_status_tool(wiki_name_or_path: str) -> str:
     Args:
         wiki_name_or_path: Existing wiki name or filesystem path.
     """
-    result = service.source_status(wiki_name_or_path)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.source_status(resolved_wiki)
     return _json_result({"ok": True, **result})
 
 
 @tool("wiki_sync_sources", parse_docstring=True)
-def wiki_sync_sources_tool(wiki_name_or_path: str, limit: int = 0) -> str:
+def wiki_sync_sources_tool(runtime: ToolRuntime[ContextT, ThreadState], wiki_name_or_path: str, limit: int = 0) -> str:
     """Import all unparsed files already stored under raw/sources/.
 
     Use this when the user has manually placed files into a wiki's raw/sources/
@@ -279,12 +336,14 @@ def wiki_sync_sources_tool(wiki_name_or_path: str, limit: int = 0) -> str:
         wiki_name_or_path: Existing wiki name or filesystem path.
         limit: Maximum pending files to import. Use 0 to import all pending files.
     """
-    result = service.sync_pending_sources(wiki_name_or_path, limit=limit)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.sync_pending_sources(resolved_wiki, limit=limit, model_name=_get_runtime_model_name(runtime))
     return _json_result({"ok": True, **result})
 
 
 @tool("wiki_archive_answer", parse_docstring=True)
 def wiki_archive_answer_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     question: str,
     answer_markdown: str,
@@ -305,18 +364,21 @@ def wiki_archive_answer_tool(
         citations: Wiki pages used by the answer, each with title and path.
         auto_archive: If true, apply archive writes when the answer is worth archiving.
     """
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
     result = service.archive_answer(
-        wiki_name_or_path,
+        resolved_wiki,
         question,
         answer_markdown,
         citations=citations,
         auto_archive=auto_archive,
+        model_name=_get_runtime_model_name(runtime),
     )
     return _json_result({"ok": True, **result})
 
 
 @tool("wiki_lint", parse_docstring=True)
 def wiki_lint_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     mode: str = "light",
     trigger: str = "manual",
@@ -338,12 +400,14 @@ def wiki_lint_tool(
         include_semantic: Backward-compatible flag; true forces deep lint.
     """
     lint_mode = resolve_lint_mode(mode=mode, trigger=trigger, include_semantic=include_semantic)
-    result = service.lint(wiki_name_or_path, mode=lint_mode, trigger=trigger)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.lint(resolved_wiki, mode=lint_mode, trigger=trigger, model_name=_get_runtime_model_name(runtime))
     return _json_result({"ok": True, "mode": lint_mode, "trigger": trigger, "issues": result, "issue_count": len(result)})
 
 
 @tool("wiki_repair_lint", parse_docstring=True)
 def wiki_repair_lint_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     mode: str = "light",
     trigger: str = "manual",
@@ -361,12 +425,14 @@ def wiki_repair_lint_tool(
         trigger: Reason for lint/repair, for example "manual", "batch_ingest", or "chat_quality_drop".
         dry_run: If true, return the proposed Markdown changes without writing files.
     """
-    result = service.repair(wiki_name_or_path, mode=mode, trigger=trigger, dry_run=dry_run)
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.repair(resolved_wiki, mode=mode, trigger=trigger, dry_run=dry_run, model_name=_get_runtime_model_name(runtime))
     return _json_result(result)
 
 
 @tool("wiki_evolve_schema", parse_docstring=True)
 def wiki_evolve_schema_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     change_request: str,
     evidence: list[str] | None = None,
@@ -386,11 +452,13 @@ def wiki_evolve_schema_tool(
         evidence: Optional repeated issues, examples, or lint findings that justify the change.
         dry_run: If true, return the proposed schema without writing files.
     """
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
     result = service.evolve_schema(
-        wiki_name_or_path,
+        resolved_wiki,
         change_request=change_request,
         evidence=evidence,
         dry_run=dry_run,
+        model_name=_get_runtime_model_name(runtime),
     )
     return _json_result(result)
 

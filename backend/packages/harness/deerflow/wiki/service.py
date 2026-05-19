@@ -16,9 +16,9 @@ from deerflow.wiki.lint import lint_wiki
 from deerflow.wiki.models import RawSource
 from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root
 from deerflow.wiki.query import search_wiki
+from deerflow.wiki.repair import repair_lint
 from deerflow.wiki.report import get_report_context as build_report_context
 from deerflow.wiki.report import plan_report as build_report_plan
-from deerflow.wiki.repair import repair_lint
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.scaffold import create_wiki_database
 from deerflow.wiki.schema import evolve_schema as evolve_wiki_schema
@@ -41,14 +41,14 @@ def open_wiki(wiki_name_or_path: str) -> WikiPaths:
     return build_wiki_paths(root)
 
 
-def add_source(wiki_name_or_path: str, source_file: str | Path) -> dict:
+def add_source(wiki_name_or_path: str, source_file: str | Path, *, model_name: str | None = None) -> dict:
     """向 wiki 导入一个原始资料文件。"""
-    result = add_sources(wiki_name_or_path, [source_file])
+    result = add_sources(wiki_name_or_path, [source_file], model_name=model_name)
     return result["sources"][0]
 
 
-def _post_ingest_lint(paths: WikiPaths, *, trigger: str) -> dict:
-    lint_issues = [asdict(issue) for issue in lint_wiki(paths, mode="light", trigger=trigger)]
+def _post_ingest_lint(paths: WikiPaths, *, trigger: str, model_name: str | None = None) -> dict:
+    lint_issues = [asdict(issue) for issue in lint_wiki(paths, mode="light", trigger=trigger, model_name=model_name)]
     return {
         "mode": "light",
         "trigger": trigger,
@@ -104,15 +104,15 @@ def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: 
         f.write(entry)
 
 
-def add_sources(wiki_name_or_path: str, source_files: list[str | Path]) -> dict:
+def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model_name: str | None = None) -> dict:
     """Import a batch of source files into one wiki generation pass."""
     if not source_files:
         raise ValueError("source_files cannot be empty")
 
     paths = open_wiki(wiki_name_or_path)
-    sources = ingest_files(paths, source_files)
+    sources = ingest_files(paths, source_files, model_name=model_name)
     lint_trigger = "batch_ingest" if len(sources) > 1 else "add_source"
-    lint_result = _post_ingest_lint(paths, trigger=lint_trigger)
+    lint_result = _post_ingest_lint(paths, trigger=lint_trigger, model_name=model_name)
     repo = WikiRepository(paths)
     for source in sources:
         source.metadata["lint"] = lint_result
@@ -224,7 +224,7 @@ def source_status(wiki_name_or_path: str) -> dict:
     }
 
 
-def sync_pending_sources(wiki_name_or_path: str, *, limit: int = 0) -> dict:
+def sync_pending_sources(wiki_name_or_path: str, *, limit: int = 0, model_name: str | None = None) -> dict:
     """Import raw/sources files that are not yet present in the wiki index."""
     paths = open_wiki(wiki_name_or_path)
     status = source_status(str(paths.root))
@@ -263,7 +263,7 @@ def sync_pending_sources(wiki_name_or_path: str, *, limit: int = 0) -> dict:
 
     if batch_paths:
         try:
-            result = add_sources(str(paths.root), batch_paths)
+            result = add_sources(str(paths.root), batch_paths, model_name=model_name)
             for source in result["sources"]:
                 processed.append(
                     {
@@ -344,6 +344,7 @@ def archive_answer(
     *,
     citations: list[dict] | None = None,
     auto_archive: bool = True,
+    model_name: str | None = None,
 ) -> dict:
     """Judge and optionally archive an answer that was grounded in wiki_search."""
     paths = open_wiki(wiki_name_or_path)
@@ -355,7 +356,7 @@ def archive_answer(
         path = str(item.get("path") or "").strip()
         if title and path:
             normalized_citations.append(WikiCitation(title=title, path=path))
-    return asdict(archive_wiki_answer(paths, question, answer_markdown, citations=normalized_citations, auto_archive=auto_archive))
+    return asdict(archive_wiki_answer(paths, question, answer_markdown, citations=normalized_citations, auto_archive=auto_archive, model_name=model_name))
 
 
 def lint(
@@ -364,10 +365,11 @@ def lint(
     mode: str = "light",
     trigger: str | None = None,
     include_semantic: bool | None = None,
+    model_name: str | None = None,
 ) -> list[dict]:
     """运行 wiki 健康检查。"""
     paths = open_wiki(wiki_name_or_path)
-    return [asdict(issue) for issue in lint_wiki(paths, mode=mode, trigger=trigger, include_semantic=include_semantic)]
+    return [asdict(issue) for issue in lint_wiki(paths, mode=mode, trigger=trigger, include_semantic=include_semantic, model_name=model_name)]
 
 
 def repair(
@@ -376,10 +378,11 @@ def repair(
     mode: str = "light",
     trigger: str = "manual",
     dry_run: bool = True,
+    model_name: str | None = None,
 ) -> dict:
     """Use the configured chat model to repair lint issues by editing wiki Markdown."""
     paths = open_wiki(wiki_name_or_path)
-    return repair_lint(paths, mode=mode, trigger=trigger, dry_run=dry_run)
+    return repair_lint(paths, mode=mode, trigger=trigger, dry_run=dry_run, model_name=model_name)
 
 
 def evolve_schema(
@@ -388,10 +391,11 @@ def evolve_schema(
     change_request: str,
     evidence: list[str] | None = None,
     dry_run: bool = True,
+    model_name: str | None = None,
 ) -> dict:
     """Propose or apply a controlled schema.md evolution."""
     paths = open_wiki(wiki_name_or_path)
-    return evolve_wiki_schema(paths, change_request=change_request, evidence=evidence, dry_run=dry_run)
+    return evolve_wiki_schema(paths, change_request=change_request, evidence=evidence, dry_run=dry_run, model_name=model_name)
 
 
 def summarize_paths(paths: WikiPaths) -> dict:

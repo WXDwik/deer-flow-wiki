@@ -99,7 +99,14 @@ def _context_pages_from_citations(paths: WikiPaths, citations: list[WikiCitation
     return pages
 
 
-def judge_archive_value(paths: WikiPaths, question: str, answer: AnswerDraft, context_pages: list[WikiContextPage]) -> ArchiveDecision:
+def judge_archive_value(
+    paths: WikiPaths,
+    question: str,
+    answer: AnswerDraft,
+    context_pages: list[WikiContextPage],
+    *,
+    model_name: str | None = None,
+) -> ArchiveDecision:
     """Decide whether the answer should be archived and how it should be written."""
     prompt = f"""You decide whether a wiki-grounded answer should be written back to the wiki.
 
@@ -144,7 +151,7 @@ Citations:
 Retrieved context pages:
 {json.dumps([asdict(page) for page in context_pages], ensure_ascii=False, indent=2)}
 """
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     data = _json_from_model_text(_model_text(model.invoke(prompt, config={"run_name": "wiki_archive_decision"})))
     if data is None:
         raise ValueError("Wiki archive decision model did not return valid JSON")
@@ -186,6 +193,8 @@ def build_archive_page(
     answer: AnswerDraft,
     decision: ArchiveDecision,
     context_pages: list[WikiContextPage],
+    *,
+    model_name: str | None = None,
 ) -> ArchiveDraft:
     """Condense a conversational answer into a standalone wiki page draft."""
     page_type = decision.page_type or _default_page_type(question, context_pages)
@@ -220,7 +229,7 @@ Answer:
 Cited pages:
 {json.dumps(cited_pages, ensure_ascii=False, indent=2)}
 """
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     data = _json_from_model_text(_model_text(model.invoke(prompt, config={"run_name": "wiki_archive_page"})))
     if data is not None:
         title = str(data.get("title") or title).strip() or title
@@ -308,6 +317,8 @@ def build_existing_page_updates(
     decision: ArchiveDecision,
     context_pages: list[WikiContextPage],
     archived_page: WikiPage | None,
+    *,
+    model_name: str | None = None,
 ) -> list[WikiPageChange]:
     """Ask the model for precise local edits to existing wiki pages."""
     target_pages = decision.target_pages or [page.path for page in context_pages if page.page_type in {"concept", "entity", "synthesis"}]
@@ -359,7 +370,7 @@ Archived page:
 Allowed target file context:
 {json.dumps(context, ensure_ascii=False, indent=2)}
 """
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     data = _json_from_model_text(_model_text(model.invoke(prompt, config={"run_name": "wiki_archive_updates"})))
     if data is None:
         raise ValueError("Wiki archive update model did not return valid JSON")
@@ -456,11 +467,12 @@ def archive_answer(
     *,
     citations: list[WikiCitation] | None = None,
     auto_archive: bool = True,
+    model_name: str | None = None,
 ) -> QueryAnswer:
     """Judge and optionally write back an answer that already used wiki_search."""
     answer = AnswerDraft(answer_markdown=answer_markdown, citations=citations or [])
     context_pages = _context_pages_from_citations(paths, answer.citations)
-    decision = judge_archive_value(paths, question, answer, context_pages)
+    decision = judge_archive_value(paths, question, answer, context_pages, model_name=model_name)
     archived_page: WikiPage | None = None
     page_changes: list[WikiPageChange] = []
     archive_applied = False
@@ -468,13 +480,13 @@ def archive_answer(
     if auto_archive and decision.should_archive:
         changed_paths: list[str] = []
         if decision.action in {"create_page", "create_and_update"}:
-            draft = build_archive_page(paths, question, answer, decision, context_pages)
+            draft = build_archive_page(paths, question, answer, decision, context_pages, model_name=model_name)
             archived_page = write_archive_page(paths, draft)
             update_index_markdown(paths, archived_page)
             changed_paths.append(archived_page.path)
 
         if decision.action in {"update_existing", "create_and_update"}:
-            page_changes = build_existing_page_updates(paths, question, answer, decision, context_pages, archived_page)
+            page_changes = build_existing_page_updates(paths, question, answer, decision, context_pages, archived_page, model_name=model_name)
             apply_page_changes(paths, page_changes)
             changed_paths.extend(change.path for change in page_changes)
 

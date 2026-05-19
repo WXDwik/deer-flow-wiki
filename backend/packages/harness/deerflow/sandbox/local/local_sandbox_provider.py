@@ -48,7 +48,7 @@ class LocalSandboxProvider(SandboxProvider):
                 )
 
             # Map custom mounts from sandbox config
-            _RESERVED_CONTAINER_PREFIXES = [container_path, "/mnt/acp-workspace", "/mnt/user-data"]
+            _RESERVED_CONTAINER_PREFIXES = [container_path, "/mnt/acp-workspace", "/mnt/user-data", "/mnt/user-wiki"]
             sandbox_config = config.sandbox
             if sandbox_config and sandbox_config.mounts:
                 for mount in sandbox_config.mounts:

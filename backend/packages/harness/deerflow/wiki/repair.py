@@ -12,7 +12,6 @@ from deerflow.models import create_chat_model
 from deerflow.wiki.lint import LintIssue, lint_wiki, resolve_lint_mode
 from deerflow.wiki.paths import WikiPaths
 
-
 _MAX_FILE_CHARS = 12_000
 _MAX_TOTAL_CONTEXT_CHARS = 60_000
 
@@ -296,10 +295,11 @@ def repair_lint(
     trigger: str = "manual",
     dry_run: bool = True,
     issues: list[LintIssue | dict] | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Use the configured chat model to repair wiki lint issues."""
     lint_mode = resolve_lint_mode(mode=mode, trigger=trigger)
-    lint_issues = issues if issues is not None else lint_wiki(paths, mode=lint_mode, trigger=trigger)
+    lint_issues = issues if issues is not None else lint_wiki(paths, mode=lint_mode, trigger=trigger, model_name=model_name)
     issue_dicts = [_issue_to_dict(issue) for issue in lint_issues]
     if not issue_dicts:
         return {
@@ -314,7 +314,7 @@ def repair_lint(
 
     instructions = build_repair_instructions(paths, lint_issues)
     context = _read_context(paths, instructions)
-    model = create_chat_model(thinking_enabled=False)
+    model = create_chat_model(name=model_name, thinking_enabled=False)
     response = model.invoke(_repair_prompt(paths, instructions, context), config={"run_name": "wiki_lint_repair"})
     content = getattr(response, "content", response)
     if isinstance(content, list):
@@ -329,7 +329,7 @@ def repair_lint(
         for change in changes:
             _apply_change(paths, change)
         _append_repair_log(paths, summary, [change["path"] for change in changes])
-        post_lint = [asdict(issue) for issue in lint_wiki(paths, mode="light", trigger="repair_verify")]
+        post_lint = [asdict(issue) for issue in lint_wiki(paths, mode="light", trigger="repair_verify", model_name=model_name)]
     else:
         post_lint = None
 
