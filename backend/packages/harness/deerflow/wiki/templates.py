@@ -130,22 +130,22 @@ LLM 生成页面正文时不要再次生成 YAML frontmatter，也不要重复�
 
 ## 链接规则
 
-页面之间使用 Obsidian 风格链接，链接目标必须是目标 Markdown 文件名去掉 `.md` 后的 lowercase kebab-case slug：
+页面之间使用 Obsidian 风格链接，链接目标必须是目标 Markdown 文件名去掉 `.md` 后的实际文件 stem。新链接应优先使用实际文件 stem 并保留其可读大小写；旧的小写 slug 链接仍可被系统解析以兼容已有 Wiki：
 
 ```markdown
-[[page-slug]]
+[[Page-Stem]]
 ```
 
-示例：目标文件 `wiki/entities/lite-transformer-for-uad.md` 必须写作 `[[lite-transformer-for-uad]]`。
-需要显示可读标题时使用 Obsidian alias，例如 `[[lite-transformer-for-uad|Lite Transformer for UAD]]`。
-不要使用页面标题自造链接，例如不要写 `[[Lite Transformer for UAD]]`。
+示例：目标文件 `wiki/entities/Lite-Transformer-for-UAD.md` 应写作 `[[Lite-Transformer-for-UAD]]`。
+需要显示可读标题时使用 Obsidian alias，例如 `[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]`。
+不要使用不存在的页面标题自造链接，例如目标文件不存在时不要写 `[[Lite Transformer for UAD]]`。
 
 ## 语言与显示标题规则
 
 - 本 Wiki 的说明性内容默认使用 schema 中声明的语言；`zh-CN` Wiki 使用中文说明。
 - 英文专有名词、论文标题、模型名、方法名、数据集名、作者名、组织名和缩写必须保留原始或规范大小写，例如 `MIMO`、`UAD`、`Transformer`、`Deep Learning`。
 - 用户可见的页面标题、frontmatter `title`、一级标题、索引展示名、图谱节点标签和正文中的英文术语必须使用人类可读显示名，不得直接使用全小写 slug。
-- 文件名和 wikilink 目标仍然是机器标识，可以使用 lowercase kebab-case；但机器 slug 不得污染页面标题、正文显示或图谱标签。
+- 文件名和 wikilink 目标必须使用安全、短而具体的可读文件名；保留英文专有名词、缩写、论文标题和术语的规范大小写。
 - 如果只有 slug 而源材料中存在可读标题或术语写法，必须从源材料恢复可读写法；只有无法恢复时才保留 slug。
 
 ## 溯源规则
@@ -198,7 +198,8 @@ deep lint 检查事实缺少来源、页面间矛盾、过时结论、重复概�
 
 ## 命名规则
 
-- 文件名使用小写 kebab-case，作为稳定机器 slug 和 wikilink 目标。
+- 文件名使用安全、短而具体的可读 kebab-case，保留英文专有名词、缩写、论文标题和术语的规范大小写。
+- wikilink 目标使用实际 Markdown 文件名去掉 `.md` 后的 stem；旧的小写 slug 链接仅作为兼容格式，不作为新生成内容的首选格式。
 - frontmatter `title`、页面一级标题、索引显示名和图谱节点标签不得使用小写 slug 代替，必须保留人类可读大小写。
 - 文件名短而具体。
 - comparison 页面优先使用 `a-vs-b.md`。
@@ -276,25 +277,27 @@ When generating page body content, do not include YAML frontmatter or a duplicat
 
 ## Link Rules
 
-Use Obsidian-style links between pages. The link target must be the lowercase
-kebab-case slug from the target Markdown filename without `.md`:
+Use Obsidian-style links between pages. The link target must be the actual
+filename stem from the target Markdown file without `.md`. New links should
+prefer the actual stem and preserve its readable capitalization; old lowercase
+slug links are still accepted by the system for compatibility:
 
 ```markdown
-[[page-slug]]
+[[Page-Stem]]
 ```
 
-Example: target file `wiki/entities/lite-transformer-for-uad.md` must be linked
-as `[[lite-transformer-for-uad]]`.
+Example: target file `wiki/entities/Lite-Transformer-for-UAD.md` should be
+linked as `[[Lite-Transformer-for-UAD]]`.
 Use an Obsidian alias when the reader should see a display title, for example
-`[[lite-transformer-for-uad|Lite Transformer for UAD]]`.
-Do not invent links from page titles, for example do not write `[[Lite Transformer for UAD]]`.
+`[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]`.
+Do not invent links from page titles, for example do not write `[[Lite Transformer for UAD]]` when that file stem does not exist.
 
 ## Language And Display Title Rules
 
 - Use the schema language for explanatory prose; a `zh-CN` wiki should use Chinese explanations by default.
 - Preserve the original or conventional capitalization of English proper nouns, paper titles, model names, method names, datasets, author names, organizations, and acronyms, such as `MIMO`, `UAD`, `Transformer`, and `Deep Learning`.
 - User-visible page titles, frontmatter `title`, H1 headings, index display names, graph node labels, and English terms in prose must use reader-facing display names, not lowercase slugs.
-- Filenames and wikilink targets remain machine identifiers and may use lowercase kebab-case; machine slugs must not leak into page titles, prose, or graph labels.
+- Filenames and wikilink targets must use safe, short, specific readable filenames; preserve conventional capitalization for English proper nouns, acronyms, paper titles, and technical terms.
 - If only a slug is available but the source material contains a readable title or term spelling, recover the readable form from the source. Keep the slug only when no readable form can be recovered.
 
 ## Source Traceability
@@ -350,7 +353,8 @@ Lint repair may edit only Markdown files under `wiki/`; never edit `raw/` or `.l
 
 ## Naming Rules
 
-- Use lowercase kebab-case filenames as stable machine slugs and wikilink targets.
+- Use safe, short, specific readable kebab-case filenames that preserve conventional capitalization for English proper nouns, acronyms, paper titles, and technical terms.
+- Wikilink targets should use the actual Markdown filename stem without `.md`; old lowercase slug links are compatibility-only and should not be preferred in newly generated content.
 - Do not use lowercase slugs as frontmatter `title`, page H1 headings, index display names, or graph node labels; preserve readable capitalization there.
 - Keep filenames short but specific.
 - Prefer `a-vs-b.md` for comparison pages.

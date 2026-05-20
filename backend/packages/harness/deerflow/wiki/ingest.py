@@ -214,7 +214,7 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
       "title": "Human-readable page title, preserving original capitalization",
       "source_ids": ["source ids that support this page"],
       "tags": ["short-tag"],
-      "content": "Markdown body. Use slug wikilinks like [[page-slug]] or [[page-slug|Readable Label]] when useful."
+      "content": "Markdown body. Use wikilinks targeting existing page filename stems, like [[Page-Stem]] or [[Page-Stem|Readable Label]], when useful."
     }}
   ]
 }}
@@ -237,10 +237,11 @@ Rules:
   and acronyms (for example MIMO, UAD, Transformer, Deep Learning). Do not
   return lowercase slugs as visible titles when a readable title can be
   recovered from the imported source.
-- Wikilinks must target lowercase kebab-case page slugs, matching the target
-  Markdown filename without .md. Use [[lite-transformer-for-uad]], not
-  [[Lite Transformer for UAD]]. Use aliases such as
-  [[lite-transformer-for-uad|Lite Transformer for UAD]] when visible link text
+- Wikilinks must target existing page filename stems without .md. Preserve
+  readable filename capitalization when a page stem uses it. Old lowercase links
+  are accepted for compatibility, but newly generated links should use the
+  actual page stem when it is available. Use aliases such as
+  [[Lite-Transformer-for-UAD|Lite Transformer for UAD]] when visible link text
   should preserve readable capitalization.
 - Only link to pages that already exist or pages returned in this JSON response.
 - Do not invent facts.

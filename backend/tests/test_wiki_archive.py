@@ -34,7 +34,7 @@ def test_archive_answer_judges_without_writing_when_auto_archive_disabled(tmp_pa
                     "reason": "Reusable definition.",
                     "action": "create_page",
                     "page_type": "query",
-                    "suggested_title": "RAG definition",
+                    "suggested_title": "RAG Definition",
                     "target_pages": [],
                     "tags": ["rag"],
                     "cited_pages": ["wiki/concepts/rag.md"],
@@ -57,7 +57,7 @@ def test_archive_answer_judges_without_writing_when_auto_archive_disabled(tmp_pa
     assert result.archive_decision.action == "create_page"
     assert result.archive_applied is False
     assert result.archived_page is None
-    assert not (paths.wiki_queries_dir / "rag-definition.md").exists()
+    assert not (paths.wiki_queries_dir / "RAG-Definition.md").exists()
 
 
 def test_archive_answer_auto_archive_creates_page_updates_index_and_log(tmp_path: Path) -> None:
@@ -76,7 +76,7 @@ def test_archive_answer_auto_archive_creates_page_updates_index_and_log(tmp_path
                     "reason": "Reusable definition.",
                     "action": "create_page",
                     "page_type": "query",
-                    "suggested_title": "RAG definition",
+                    "suggested_title": "RAG Definition",
                     "target_pages": [],
                     "tags": ["rag"],
                     "cited_pages": ["wiki/concepts/rag.md"],
@@ -86,7 +86,7 @@ def test_archive_answer_auto_archive_creates_page_updates_index_and_log(tmp_path
         AIMessage(
             content=json.dumps(
                 {
-                    "title": "RAG definition",
+                    "title": "RAG Definition",
                     "markdown_body": "## Conclusion\n\nRAG combines retrieval with generation.\n\n## Evidence\n\n- [[rag]]",
                 }
             )
@@ -102,17 +102,17 @@ def test_archive_answer_auto_archive_creates_page_updates_index_and_log(tmp_path
             auto_archive=True,
         )
 
-    archived = paths.wiki_queries_dir / "rag-definition.md"
+    archived = paths.wiki_queries_dir / "RAG-Definition.md"
     assert archived.is_file()
     assert "## Conclusion" in archived.read_text(encoding="utf-8")
     assert result.archive_applied is True
     assert result.archived_page is not None
-    assert result.archived_page.path == "wiki/queries/rag-definition.md"
-    assert "[[rag-definition|RAG definition]]" in paths.wiki_index_file.read_text(encoding="utf-8")
+    assert result.archived_page.path == "wiki/queries/RAG-Definition.md"
+    assert "[[RAG-Definition|RAG Definition]]" in paths.wiki_index_file.read_text(encoding="utf-8")
     assert "query-archive" in paths.wiki_log_file.read_text(encoding="utf-8")
 
     index = WikiRepository(paths).read_index()
-    assert any(page["path"] == "wiki/queries/rag-definition.md" for page in index["pages"])
+    assert any(page["path"] == "wiki/queries/RAG-Definition.md" for page in index["pages"])
 
 
 def test_archive_answer_auto_archive_updates_existing_page(tmp_path: Path) -> None:

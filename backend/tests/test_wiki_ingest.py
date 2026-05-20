@@ -62,12 +62,11 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     assert "schema_version: 1" in prompt
     assert "display_title" in prompt
     assert "reader-facing labels" in prompt
-    assert "[[lite-transformer-for-uad|Lite Transformer for UAD]]" in prompt
-    assert "[[lite-transformer-for-uad]]" in prompt
+    assert "[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]" in prompt
     assert "[[Lite Transformer for UAD]]" in prompt
 
     source_summary = paths.wiki_sources_dir / "paper.md"
-    concept_page = paths.wiki_concepts_dir / "retrieval-augmented-generation.md"
+    concept_page = paths.wiki_concepts_dir / "Retrieval-Augmented-Generation.md"
     assert "This source summarizes RAG." in source_summary.read_text(encoding="utf-8")
     assert "RAG combines retrieval" in concept_page.read_text(encoding="utf-8")
 
@@ -102,7 +101,7 @@ def test_ingest_source_summary_uses_readable_display_title_from_model(tmp_path: 
     with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
         source = ingest_file(paths, source_file)
 
-    source_page = paths.wiki_sources_dir / "deep-learning-based-activity-detection-for-uad.md"
+    source_page = paths.wiki_sources_dir / "Deep-Learning-Based-Activity-Detection-for-UAD.md"
     text = source_page.read_text(encoding="utf-8")
     assert '# Deep Learning-Based Activity Detection for UAD' in text
     assert 'title: "Deep Learning-Based Activity Detection for UAD"' in text
@@ -161,12 +160,12 @@ def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None
     assert model.invoke.call_count == 1
     assert {source.metadata["ingest_mode"] for source in sources} == {"llm_batch"}
 
-    comparison = paths.wiki_comparisons_dir / "method-comparison.md"
+    comparison = paths.wiki_comparisons_dir / "Method-Comparison.md"
     assert comparison.is_file()
     assert "Method A and Method B" in comparison.read_text(encoding="utf-8")
 
     index = WikiRepository(paths).read_index()
-    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/comparisons/method-comparison.md"]
+    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/comparisons/Method-Comparison.md"]
     assert len(comparison_pages) == 1
     assert len(comparison_pages[0]["sources"]) == 2
 
@@ -388,7 +387,7 @@ def test_sync_pending_sources_batches_unique_pending_files(tmp_path: Path) -> No
     assert result["processed_count"] == 2
     assert result["failed_count"] == 0
     assert model.invoke.call_count == 1
-    assert (paths.wiki_comparisons_dir / "pending-source-comparison.md").is_file()
+    assert (paths.wiki_comparisons_dir / "Pending-Source-Comparison.md").is_file()
 
 
 def test_sync_pending_sources_imports_only_unparsed_raw_files(tmp_path: Path) -> None:

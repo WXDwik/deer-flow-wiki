@@ -11,7 +11,7 @@ from typing import Any
 
 from deerflow.models import create_chat_model
 from deerflow.wiki.lint import LintIssue, lint_wiki, resolve_lint_mode
-from deerflow.wiki.paths import WikiPaths, slugify_name
+from deerflow.wiki.paths import WikiPaths, display_slugify_name, slugify_name
 
 _MAX_FILE_CHARS = 12_000
 _MAX_TOTAL_CONTEXT_CHARS = 60_000
@@ -96,12 +96,19 @@ def _broken_link_target(issue: dict) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def _existing_page_slugs(paths: WikiPaths) -> set[str]:
-    return {path.stem for path in paths.wiki_dir.rglob("*.md") if path.is_file()}
+def _link_match_key(value: str) -> str:
+    try:
+        return slugify_name(value)
+    except ValueError:
+        return display_slugify_name(value).lower()
+
+
+def _existing_page_stems(paths: WikiPaths) -> dict[str, str]:
+    return {_link_match_key(path.stem): path.stem for path in paths.wiki_dir.rglob("*.md") if path.is_file()}
 
 
 def _deterministic_slug_link_repairs(paths: WikiPaths, issues: list[dict]) -> tuple[list[dict[str, str]], list[dict]]:
-    slugs = _existing_page_slugs(paths)
+    stems_by_normalized = _existing_page_stems(paths)
     remaining: list[dict] = []
     originals: dict[Path, str] = {}
     repaired_by_path: dict[Path, str] = {}
@@ -115,12 +122,13 @@ def _deterministic_slug_link_repairs(paths: WikiPaths, issues: list[dict]) -> tu
             continue
 
         try:
-            slug = slugify_name(target)
+            key = _link_match_key(target)
         except ValueError:
             remaining.append(issue)
             continue
 
-        if slug not in slugs:
+        actual_stem = stems_by_normalized.get(key)
+        if actual_stem is None:
             remaining.append(issue)
             continue
 
@@ -129,7 +137,9 @@ def _deterministic_slug_link_repairs(paths: WikiPaths, issues: list[dict]) -> tu
             current = page_path.read_text(encoding="utf-8", errors="ignore") if page_path.exists() else ""
             originals[page_path] = current
         pattern = re.compile(r"\[\[\s*" + re.escape(target) + r"\s*(?:\|[^\]]+)?\]\]")
-        repaired = pattern.sub(f"[[{slug}]]", current)
+        label = target.strip()
+        replacement = f"[[{actual_stem}]]" if label == actual_stem else f"[[{actual_stem}|{label}]]"
+        repaired = pattern.sub(replacement, current)
         if repaired == current:
             remaining.append(issue)
             continue
@@ -140,7 +150,7 @@ def _deterministic_slug_link_repairs(paths: WikiPaths, issues: list[dict]) -> tu
         {
             "path": page_path.relative_to(paths.root).as_posix(),
             "operation": "replace",
-            "reason": "Replace title-style wikilinks with canonical page slugs.",
+            "reason": "Replace title-style wikilinks with existing page filename stems.",
             "old": originals[page_path],
             "new": repaired,
         }
@@ -246,9 +256,9 @@ Hard constraints:
 - Follow schema.md from the available file context as the active wiki contract.
 - Preserve source-grounded nuance. If sources conflict, document the disagreement instead of inventing certainty.
 - Do not add unrelated content just to satisfy lint.
-- Wikilinks must target lowercase kebab-case page slugs matching Markdown
-  filenames without .md. Prefer [[page-slug]] and do not write [[Page Title]].
-- Use aliases such as [[page-slug|Readable Label]] when visible link text should
+- Wikilinks must target existing page filename stems without .md. Preserve
+  readable filename capitalization when the file stem uses it.
+- Use aliases such as [[Page-Stem|Readable Label]] when visible link text should
   remain human-readable. Preserve Chinese explanatory prose where appropriate
   and preserve the original or conventional capitalization of English proper
   nouns, paper titles, model names, methods, datasets, authors, organizations,
@@ -389,7 +399,7 @@ def repair_lint(
     model_changes: list[dict[str, str]] = []
     summary_parts: list[str] = []
     if deterministic_changes:
-        summary_parts.append("Replaced title-style wikilinks with canonical page slugs.")
+        summary_parts.append("Replaced title-style wikilinks with existing page filename stems.")
 
     if remaining_issues:
         instructions = build_repair_instructions(paths, remaining_issues)

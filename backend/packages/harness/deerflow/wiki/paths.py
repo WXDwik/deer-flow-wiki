@@ -126,6 +126,24 @@ def slugify_name(name: str) -> str:
     return value
 
 
+def display_slugify_name(name: str) -> str:
+    """Convert a display title into a safe, readable Wiki page filename stem.
+
+    Unlike ``slugify_name``, this preserves readable capitalization and
+    non-path-separator Unicode text for user-facing Markdown page filenames.
+    It still normalizes whitespace to hyphens and removes path-unsafe
+    characters so the result is safe to use as a single filename component.
+    """
+    value = name.strip()
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", value)
+    value = re.sub(r"\s+", "-", value)
+    value = re.sub(r"-+", "-", value)
+    value = value.strip(" .-_")
+    if not value:
+        raise ValueError("Wiki page filename cannot be empty.")
+    return value
+
+
 def resolve_wiki_root(
     wiki_name_or_path: str,
     *,
@@ -285,6 +303,23 @@ def safe_filename(original_name: str) -> str:
     return f"{stem}{suffix}"
 
 
+def safe_display_filename(original_name: str) -> str:
+    """Convert a filename to a safe display-preserving filename.
+
+    This is for generated Wiki Markdown pages, where capitalization is part of
+    the human-readable title. Raw source files keep using ``safe_filename`` so
+    their historical lowercase import behavior stays unchanged.
+    """
+    path = Path(original_name)
+    stem = display_slugify_name(path.stem)
+    suffix = path.suffix.lower()
+
+    if suffix and not re.fullmatch(r"\.[A-Za-z0-9]+", suffix):
+        suffix = ""
+
+    return f"{stem}{suffix}"
+
+
 def unique_child_path(directory: str | Path, filename: str) -> Path:
     """在指定目录下生成一个不会重名的文件路径。
 
@@ -295,6 +330,27 @@ def unique_child_path(directory: str | Path, filename: str) -> Path:
     """
     directory_path = Path(directory).expanduser().resolve()
     safe_name = safe_filename(filename)
+
+    candidate = directory_path / safe_name
+    if not candidate.exists():
+        return candidate
+
+    original = Path(safe_name)
+    stem = original.stem
+    suffix = original.suffix
+
+    counter = 2
+    while True:
+        candidate = directory_path / f"{stem}-{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def unique_display_child_path(directory: str | Path, filename: str) -> Path:
+    """Generate a unique child path while preserving readable filename casing."""
+    directory_path = Path(directory).expanduser().resolve()
+    safe_name = safe_display_filename(filename)
 
     candidate = directory_path / safe_name
     if not candidate.exists():
@@ -324,38 +380,38 @@ def raw_asset_path(paths: WikiPaths, original_name: str) -> Path:
 
 def source_summary_path(paths: WikiPaths, title: str) -> Path:
     """为资料摘要页生成 wiki/sources/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_sources_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_sources_dir, filename)
 
 
 def entity_page_path(paths: WikiPaths, title: str) -> Path:
     """为实体页生成为 wiki/entities/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_entities_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_entities_dir, filename)
 
 
 def concept_page_path(paths: WikiPaths, title: str) -> Path:
     """为概念页生成 wiki/concepts/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_concepts_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_concepts_dir, filename)
 
 
 def query_page_path(paths: WikiPaths, title: str) -> Path:
     """为保存的问答/研究结果生成 wiki/queries/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_queries_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_queries_dir, filename)
 
 
 def synthesis_page_path(paths: WikiPaths, title: str) -> Path:
     """为综合分析页生成 wiki/synthesis/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_synthesis_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_synthesis_dir, filename)
 
 
 def comparison_page_path(paths: WikiPaths, title: str) -> Path:
     """为对比分析页生成 wiki/comparisons/ 下的 Markdown 路径。"""
-    filename = f"{slugify_name(title)}.md"
-    return unique_child_path(paths.wiki_comparisons_dir, filename)
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_comparisons_dir, filename)
 
 
 def assert_inside_wiki(paths: WikiPaths, target: str | Path) -> Path:

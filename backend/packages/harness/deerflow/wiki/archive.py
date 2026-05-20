@@ -205,10 +205,12 @@ def build_archive_page(
     prompt = f"""Turn this answer into a concise wiki page.
 
 The page should be useful when read later outside the original chat. Condense,
-structure, and preserve source references as slug wikilinks or page paths. Do
-not add unsupported facts. Wikilinks must target lowercase kebab-case page slugs
-matching Markdown filenames without .md, for example [[rag]], not [[RAG]].
-Use aliases such as [[rag|RAG]] when visible link text should preserve readable
+structure, and preserve source references as wikilinks or page paths. Do not
+add unsupported facts. Wikilinks must target existing page filename stems
+without .md. Preserve readable filename capitalization when a page stem uses it.
+Old lowercase links are accepted for compatibility, but newly generated links
+should use the actual page stem when it is available. Use aliases such as
+[[RAG|RAG]] when visible link text should preserve readable
 capitalization. The returned title is a reader-facing page title: keep Chinese
 explanatory titles in Chinese when appropriate, and preserve the original or
 conventional capitalization of English proper nouns, paper titles, model names,
@@ -346,9 +348,9 @@ def build_existing_page_updates(
 Use small, precise edits. Prefer append for adding a short note or link. Use
 replace only when old text is an exact substring. Avoid full rewrite unless the
 target page is very small and clearly needs it.
-When adding wikilinks, use lowercase kebab-case page slugs matching Markdown
-filenames without .md; do not write page-title wikilinks.
-Use aliases such as [[page-slug|Readable Label]] when the visible text needs
+When adding wikilinks, target existing page filename stems without .md and
+preserve readable filename capitalization when the file stem uses it.
+Use aliases such as [[Page-Stem|Readable Label]] when the visible text needs
 human-readable capitalization. Preserve readable capitalization in inserted
 headings, prose, and labels; do not convert visible terms to lowercase slugs.
 

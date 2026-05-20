@@ -31,10 +31,15 @@ def test_structural_lint_detects_orphan_no_outlinks_and_broken_links(tmp_path: P
     assert all(issue.page not in {"index.md", "log.md"} for issue in issues)
 
 
-def test_structural_lint_resolves_slug_wikilinks(tmp_path: Path) -> None:
+def test_structural_lint_resolves_display_stem_and_legacy_slug_wikilinks(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    _write(paths.wiki_entities_dir / "heterogeneous-transformer-ht.md", "# Heterogeneous Transformer (HT)\n")
-    _write(paths.wiki_concepts_dir / "activity-detection.md", "Links to [[heterogeneous-transformer-ht]].")
+    _write(paths.wiki_entities_dir / "Deep-Learning-Based-Activity-Detection-for-UAD.md", "# Deep Learning-Based Activity Detection for UAD\n")
+    _write(
+        paths.wiki_concepts_dir / "Activity-Detection.md",
+        "Links to [[Deep-Learning-Based-Activity-Detection-for-UAD]], "
+        "[[deep-learning-based-activity-detection-for-uad]], and "
+        "[[entities/Deep-Learning-Based-Activity-Detection-for-UAD|Deep Learning-Based Activity Detection for UAD]].",
+    )
 
     issues = structural_lint_wiki(paths)
 
