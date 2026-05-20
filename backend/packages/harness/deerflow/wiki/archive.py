@@ -133,7 +133,7 @@ Return ONLY valid JSON:
   "reason": "short reason",
   "action": "none|create_page|update_existing|create_and_update",
   "page_type": "query|synthesis|comparison|concept|entity|null",
-  "suggested_title": "concise title or null",
+  "suggested_title": "concise reader-facing title preserving source language and capitalization, or null",
   "target_pages": ["wiki/concepts/example.md"],
   "tags": ["archived-query"],
   "cited_pages": ["wiki/sources/source.md"]
@@ -208,6 +208,11 @@ The page should be useful when read later outside the original chat. Condense,
 structure, and preserve source references as slug wikilinks or page paths. Do
 not add unsupported facts. Wikilinks must target lowercase kebab-case page slugs
 matching Markdown filenames without .md, for example [[rag]], not [[RAG]].
+Use aliases such as [[rag|RAG]] when visible link text should preserve readable
+capitalization. The returned title is a reader-facing page title: keep Chinese
+explanatory titles in Chinese when appropriate, and preserve the original or
+conventional capitalization of English proper nouns, paper titles, model names,
+methods, datasets, authors, organizations, and acronyms.
 
 Follow the active schema.md contract below. Return Markdown body only: no YAML
 frontmatter and no duplicate top-level title.
@@ -215,7 +220,7 @@ frontmatter and no duplicate top-level title.
 
 Return ONLY valid JSON:
 {{
-  "title": "Final page title",
+  "title": "Final reader-facing page title",
   "markdown_body": "Markdown body without YAML frontmatter and without top-level title"
 }}
 
@@ -343,6 +348,9 @@ replace only when old text is an exact substring. Avoid full rewrite unless the
 target page is very small and clearly needs it.
 When adding wikilinks, use lowercase kebab-case page slugs matching Markdown
 filenames without .md; do not write page-title wikilinks.
+Use aliases such as [[page-slug|Readable Label]] when the visible text needs
+human-readable capitalization. Preserve readable capitalization in inserted
+headings, prose, and labels; do not convert visible terms to lowercase slugs.
 
 Follow the active schema.md contract below:
 {schema_context(paths)}
@@ -440,7 +448,7 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
         "entity": "## Entities",
         "source": "## Sources",
     }.get(archived_page.page_type, "## Queries")
-    link = f"- [[{Path(archived_page.path).stem}]]"
+    link = f"- [[{Path(archived_page.path).stem}|{archived_page.title}]]"
     if link in current:
         return
     if section in current:

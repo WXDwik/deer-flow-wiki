@@ -248,6 +248,11 @@ Hard constraints:
 - Do not add unrelated content just to satisfy lint.
 - Wikilinks must target lowercase kebab-case page slugs matching Markdown
   filenames without .md. Prefer [[page-slug]] and do not write [[Page Title]].
+- Use aliases such as [[page-slug|Readable Label]] when visible link text should
+  remain human-readable. Preserve Chinese explanatory prose where appropriate
+  and preserve the original or conventional capitalization of English proper
+  nouns, paper titles, model names, methods, datasets, authors, organizations,
+  and acronyms in visible titles, headings, labels, and prose.
 - For broken links, if a slugified target page exists, replace the link with
   that slug. Create pages only for genuinely missing, source-supported topics.
 

@@ -60,6 +60,9 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     prompt = model.invoke.call_args.args[0]
     assert "Treat schema.md" in prompt
     assert "schema_version: 1" in prompt
+    assert "display_title" in prompt
+    assert "reader-facing labels" in prompt
+    assert "[[lite-transformer-for-uad|Lite Transformer for UAD]]" in prompt
     assert "[[lite-transformer-for-uad]]" in prompt
     assert "[[Lite Transformer for UAD]]" in prompt
 
@@ -71,6 +74,40 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     index = WikiRepository(paths).read_index()
     assert len(index["sources"]) == 1
     assert {page["page_type"] for page in index["pages"]} == {"source", "concept"}
+
+
+def test_ingest_source_summary_uses_readable_display_title_from_model(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "deep-learning-based-activity-detection-for-uad.md"
+    source_file.write_text("# Deep Learning-Based Activity Detection for UAD\n\nThe paper studies MIMO systems.", encoding="utf-8")
+
+    model = MagicMock()
+    def inject_real_source_id(prompt: str, *args, **kwargs):
+        manifest = json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nImported sources:", 1)[0])
+        payload = {
+            "sources": [
+                {
+                    "source_id": manifest[0]["source_id"],
+                    "display_title": "Deep Learning-Based Activity Detection for UAD",
+                    "source_summary": "中文说明保留 `UAD` 和 `MIMO` 的大小写。",
+                    "tags": ["uad"],
+                }
+            ],
+            "pages": [],
+        }
+        return AIMessage(content=json.dumps(payload))
+
+    model.invoke.side_effect = inject_real_source_id
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    source_page = paths.wiki_sources_dir / "deep-learning-based-activity-detection-for-uad.md"
+    text = source_page.read_text(encoding="utf-8")
+    assert '# Deep Learning-Based Activity Detection for UAD' in text
+    assert 'title: "Deep Learning-Based Activity Detection for UAD"' in text
+    assert "中文说明保留 `UAD` 和 `MIMO`" in text
+    assert source.metadata["generated_pages"][0]["title"] == "Deep Learning-Based Activity Detection for UAD"
 
 
 def test_ingest_file_falls_back_when_model_output_is_invalid(tmp_path: Path) -> None:

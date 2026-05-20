@@ -203,6 +203,7 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
   "sources": [
     {{
       "source_id": "exact source_id from the manifest",
+      "display_title": "Human-readable source title, preserving original capitalization",
       "source_summary": "Markdown summary for this source page",
       "tags": ["short-tag"]
     }}
@@ -210,10 +211,10 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
   "pages": [
     {{
       "type": "entity|concept|query|synthesis|comparison",
-      "title": "Page title",
+      "title": "Human-readable page title, preserving original capitalization",
       "source_ids": ["source ids that support this page"],
       "tags": ["short-tag"],
-      "content": "Markdown body. Use slug wikilinks like [[page-slug]] when useful."
+      "content": "Markdown body. Use slug wikilinks like [[page-slug]] or [[page-slug|Readable Label]] when useful."
     }}
   ]
 }}
@@ -230,9 +231,17 @@ Rules:
 - For a page supported by multiple sources, include all relevant source_ids.
 - Page content must be Markdown body only: no YAML frontmatter and no duplicate
   top-level # title.
+- Source display_title and page title are reader-facing labels. Preserve the
+  source language and the original or conventional capitalization of paper
+  titles, proper nouns, model names, methods, datasets, authors, organizations,
+  and acronyms (for example MIMO, UAD, Transformer, Deep Learning). Do not
+  return lowercase slugs as visible titles when a readable title can be
+  recovered from the imported source.
 - Wikilinks must target lowercase kebab-case page slugs, matching the target
   Markdown filename without .md. Use [[lite-transformer-for-uad]], not
-  [[Lite Transformer for UAD]].
+  [[Lite Transformer for UAD]]. Use aliases such as
+  [[lite-transformer-for-uad|Lite Transformer for UAD]] when visible link text
+  should preserve readable capitalization.
 - Only link to pages that already exist or pages returned in this JSON response.
 - Do not invent facts.
 
@@ -378,15 +387,16 @@ def write_generated_batch_pages(
     for item in prepared_sources:
         source = item.source
         payload = source_payloads.get(source.source_id, {})
-        summary_path = _source_summary_page_path(paths, source.title)
+        display_title = str(payload.get("display_title") or source.title).strip() or source.title
+        summary_path = _source_summary_page_path(paths, display_title)
         summary = str(payload.get("source_summary") or "Pending source summary.")
         tags = _clean_tags(payload.get("tags", []))
-        summary_md = build_source_summary_markdown(title=source.title, source_path=source.path, summary=summary, tags=tags)
+        summary_md = build_source_summary_markdown(title=display_title, source_path=source.path, summary=summary, tags=tags)
         summary_path.write_text(summary_md, encoding="utf-8")
         pages.append(
             WikiPage(
                 page_id=uuid4().hex,
-                title=source.title,
+                title=display_title,
                 path=summary_path.relative_to(paths.root).as_posix(),
                 page_type="source",
                 sources=[source.source_id],
@@ -440,13 +450,14 @@ def write_generated_pages(paths: WikiPaths, source: RawSource, content: dict[str
 
 def prepare_source(paths: WikiPaths, source_file: str | Path, now: str) -> PreparedSource:
     """Copy/cache one source before batch LLM ingestion."""
+    original_source_path = Path(source_file).expanduser().resolve()
     target, file_hash = copy_source_to_raw(paths, source_file)
     mime_type, _ = mimetypes.guess_type(target)
     source_id = uuid4().hex
 
     source = RawSource(
         source_id=source_id,
-        title=target.stem,
+        title=original_source_path.stem,
         path=target.relative_to(paths.root).as_posix(),
         sha256=file_hash,
         mime_type=mime_type,

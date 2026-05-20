@@ -20,6 +20,9 @@ def test_new_wiki_has_versioned_schema_contract(tmp_path: Path) -> None:
     assert parse_schema_version(schema) == 1
     assert "schema_version: 1" in schema
     assert "Schema 演化规则" in schema
+    assert "语言与显示标题规则" in schema
+    assert "frontmatter `title`、页面一级标题、索引显示名和图谱节点标签" in schema
+    assert "[[lite-transformer-for-uad|Lite Transformer for UAD]]" in schema
     assert paths.wiki_maintenance_dir.is_dir()
     assert config["schema"]["current_version"] == 1
     assert config["schema"]["evolution_log"] == "wiki/maintenance/schema-changelog.md"
