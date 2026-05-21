@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from deerflow.config.paths import Paths
 from deerflow.tools.builtins.wiki_tools import WIKI_TOOLS, _get_runtime_model_name, _resolve_source_file, _resolve_wiki_name_or_path
+from deerflow.wiki import service
+from deerflow.wiki.scaffold import create_wiki_database
 
 
 def test_resolve_source_file_maps_virtual_uploads_path_with_spaces(tmp_path: Path) -> None:
@@ -113,6 +117,27 @@ def test_get_runtime_model_name_uses_metadata() -> None:
     )
 
     assert _get_runtime_model_name(runtime) == "deepseek-v4-flash"
+
+
+def test_wiki_lint_rejects_missing_wiki(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="Wiki not found or incomplete"):
+        service.lint(str(tmp_path / "missing-wiki"))
+
+
+def test_wiki_lint_rejects_incomplete_wiki_layout(tmp_path: Path) -> None:
+    incomplete = tmp_path / "incomplete-wiki"
+    (incomplete / "wiki").mkdir(parents=True)
+
+    with pytest.raises(FileNotFoundError, match="Wiki not found or incomplete"):
+        service.lint(str(incomplete))
+
+
+def test_wiki_lint_keeps_existing_wiki_behavior(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+
+    result = service.lint(str(paths.root))
+
+    assert isinstance(result, list)
 
 
 def test_wiki_tools_include_source_status_tool() -> None:

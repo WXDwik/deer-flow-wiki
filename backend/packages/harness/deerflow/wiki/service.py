@@ -14,7 +14,7 @@ from deerflow.wiki.archive import archive_answer as archive_wiki_answer
 from deerflow.wiki.ingest import ingest_files, sha256_file
 from deerflow.wiki.lint import lint_wiki
 from deerflow.wiki.models import RawSource
-from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root
+from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root, wiki_layout_exists
 from deerflow.wiki.query import search_wiki
 from deerflow.wiki.repair import repair_lint
 from deerflow.wiki.report import get_report_context as build_report_context
@@ -38,6 +38,8 @@ def create_wiki(
 def open_wiki(wiki_name_or_path: str) -> WikiPaths:
     """打开已有 wiki，返回路径对象。"""
     root = resolve_wiki_root(wiki_name_or_path)
+    if not wiki_layout_exists(root):
+        raise FileNotFoundError(f"Wiki not found or incomplete: {root}")
     return build_wiki_paths(root)
 
 
