@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-PageType = Literal["source", "entity", "concept", "query", "synthesis", "comparison"]
+PageType = Literal["source", "entity", "concept", "query", "synthesis", "comparison", "deepresearch"]
 IngestStatus = Literal["pending", "processing", "completed", "failed", "skipped"]
 ArchiveAction = Literal["none", "create_page", "update_existing", "create_and_update"]
 

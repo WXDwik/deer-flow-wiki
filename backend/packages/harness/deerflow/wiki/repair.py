@@ -201,6 +201,7 @@ def build_repair_instructions(paths: WikiPaths, issues: list[LintIssue | dict]) 
                         "wiki/queries/*.md",
                         "wiki/synthesis/*.md",
                         "wiki/comparisons/*.md",
+                        "wiki/deepresearch/*.md",
                     ],
                     "instruction": (
                         "Repair this issue by editing Markdown files under wiki/ only. "
@@ -265,6 +266,8 @@ Hard constraints:
   and acronyms in visible titles, headings, labels, and prose.
 - For broken links, if a slugified target page exists, replace the link with
   that slug. Create pages only for genuinely missing, source-supported topics.
+- For wiki/deepresearch pages, fix frontmatter, wikilinks, or index structure
+  only; do not rewrite the report's factual body content.
 
 Return ONLY valid JSON:
 {{

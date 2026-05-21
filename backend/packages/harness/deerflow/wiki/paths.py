@@ -46,6 +46,7 @@ WIKI_SOURCES_DIR_NAME = "sources"  # 每个原始资料对应的摘要页。
 WIKI_QUERIES_DIR_NAME = "queries"  # 保存的聊天回答和研究问答。
 WIKI_SYNTHESIS_DIR_NAME = "synthesis"  # 跨资料综合分析。
 WIKI_COMPARISONS_DIR_NAME = "comparisons"  # 并列对比、方案比较。
+WIKI_DEEPRESEARCH_DIR_NAME = "deepresearch"  # Deep Research 生成的完整研究报告。
 WIKI_MAINTENANCE_DIR_NAME = "maintenance"  # lint 报告、schema 演化记录等维护文件。
 
 # Obsidian 配置目录，让生成的 wiki 可以直接作为 Obsidian vault 使用。
@@ -93,6 +94,7 @@ class WikiPaths:
     wiki_queries_dir: Path
     wiki_synthesis_dir: Path
     wiki_comparisons_dir: Path
+    wiki_deepresearch_dir: Path
     wiki_maintenance_dir: Path
 
     # Obsidian 配置目录。
@@ -211,6 +213,7 @@ def build_wiki_paths(wiki_root: str | Path) -> WikiPaths:
         wiki_queries_dir=wiki_dir / WIKI_QUERIES_DIR_NAME,
         wiki_synthesis_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
         wiki_comparisons_dir=wiki_dir / WIKI_COMPARISONS_DIR_NAME,
+        wiki_deepresearch_dir=wiki_dir / WIKI_DEEPRESEARCH_DIR_NAME,
         wiki_maintenance_dir=wiki_dir / WIKI_MAINTENANCE_DIR_NAME,
         obsidian_dir=root / OBSIDIAN_DIR_NAME,
         llm_wiki_dir=llm_wiki_dir,
@@ -243,6 +246,7 @@ def ensure_wiki_layout(wiki_root: str | Path) -> WikiPaths:
         paths.wiki_queries_dir,
         paths.wiki_synthesis_dir,
         paths.wiki_comparisons_dir,
+        paths.wiki_deepresearch_dir,
         paths.wiki_maintenance_dir,
         paths.obsidian_dir,
         paths.llm_wiki_dir,
@@ -274,6 +278,7 @@ def wiki_layout_exists(wiki_root: str | Path) -> bool:
         paths.wiki_queries_dir,
         paths.wiki_synthesis_dir,
         paths.wiki_comparisons_dir,
+        paths.wiki_deepresearch_dir,
         paths.wiki_maintenance_dir,
         paths.obsidian_dir,
         paths.llm_wiki_dir,
@@ -412,6 +417,12 @@ def comparison_page_path(paths: WikiPaths, title: str) -> Path:
     """为对比分析页生成 wiki/comparisons/ 下的 Markdown 路径。"""
     filename = f"{display_slugify_name(title)}.md"
     return unique_display_child_path(paths.wiki_comparisons_dir, filename)
+
+
+def deepresearch_page_path(paths: WikiPaths, title: str) -> Path:
+    """Generate a Deep Research report page path under wiki/deepresearch/."""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_deepresearch_dir, filename)
 
 
 def assert_inside_wiki(paths: WikiPaths, target: str | Path) -> Path:

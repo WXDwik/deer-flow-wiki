@@ -56,6 +56,43 @@ def test_plan_report_returns_wiki_inventory_and_candidate_pages(tmp_path: Path, 
     assert result["recommended_agent_flow"]
 
 
+def test_plan_report_recognizes_deepresearch_pages(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    report = paths.wiki_deepresearch_dir / "AUD-Deep-Research.md"
+    report.write_text(
+        "---\n"
+        "type: deepresearch\n"
+        "title: AUD Deep Research\n"
+        "generated_from_wiki_at: 2026-05-21\n"
+        "---\n\n"
+        "# AUD Deep Research\n\n"
+        "This complete Deep Research report covers UADFormer, MIMO, and activity detection.",
+        encoding="utf-8",
+    )
+    WikiRepository(paths).write_index(
+        {
+            "sources": [],
+            "pages": [
+                {
+                    "page_id": "deepresearch-1",
+                    "title": "AUD Deep Research",
+                    "path": "wiki/deepresearch/AUD-Deep-Research.md",
+                    "page_type": "deepresearch",
+                    "tags": ["deep-research"],
+                    "sources": [],
+                }
+            ],
+        }
+    )
+
+    result = plan_report(str(paths.root), "AUD Deep Research")
+
+    assert result["wiki_profile"]["page_type_counts"]["deepresearch"] == 1
+    assert result["candidate_pages"][0]["path"] == "wiki/deepresearch/AUD-Deep-Research.md"
+    assert result["candidate_pages"][0]["page_type"] == "deepresearch"
+
+
 def test_get_report_context_builds_bounded_context_pack(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
     paths = _seed_report_wiki(tmp_path)

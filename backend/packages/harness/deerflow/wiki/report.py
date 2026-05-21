@@ -30,8 +30,9 @@ _TYPE_AFFINITY: dict[str, dict[str, float]] = {
     "concept": {"entity": 1.2, "concept": 0.8, "source": 1.0, "synthesis": 1.2, "query": 1.0},
     "source": {"entity": 1.0, "concept": 1.0, "source": 0.5, "query": 0.8, "synthesis": 1.0},
     "query": {"concept": 1.0, "entity": 0.8, "synthesis": 1.0, "source": 0.8, "query": 0.5},
-    "synthesis": {"concept": 1.2, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 0.8},
-    "comparison": {"concept": 1.0, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 1.2},
+    "synthesis": {"concept": 1.2, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 0.8, "deepresearch": 1.0},
+    "comparison": {"concept": 1.0, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 1.2, "deepresearch": 1.0},
+    "deepresearch": {"concept": 1.0, "entity": 1.0, "source": 1.0, "query": 0.8, "synthesis": 1.2, "comparison": 1.0},
 }
 
 
@@ -75,6 +76,7 @@ def _page_type_from_path(path: str) -> str | None:
         "queries": "query",
         "synthesis": "synthesis",
         "comparisons": "comparison",
+        "deepresearch": "deepresearch",
     }.get(parts[1])
 
 

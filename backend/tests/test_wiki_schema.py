@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage
 
+from deerflow.wiki.paths import wiki_layout_exists
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.scaffold import create_wiki_database
 from deerflow.wiki.schema import evolve_schema, parse_schema_version, schema_context
@@ -24,9 +26,24 @@ def test_new_wiki_has_versioned_schema_contract(tmp_path: Path) -> None:
     assert "frontmatter `title`、页面一级标题、索引显示名和图谱节点标签" in schema
     assert "[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]" in schema
     assert "旧的小写 slug 链接仍可被系统解析" in schema
+    assert "`wiki/deepresearch/`" in schema
+    assert "`deepresearch`" in schema
+    assert "generated_from_wiki_at" in schema
     assert paths.wiki_maintenance_dir.is_dir()
+    assert paths.wiki_deepresearch_dir.is_dir()
+    assert "## Deep Research" in paths.wiki_index_file.read_text(encoding="utf-8")
     assert config["schema"]["current_version"] == 1
     assert config["schema"]["evolution_log"] == "wiki/maintenance/schema-changelog.md"
+
+
+def test_wiki_layout_requires_deepresearch_directory(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+
+    assert wiki_layout_exists(paths.root)
+
+    shutil.rmtree(paths.wiki_deepresearch_dir)
+
+    assert not wiki_layout_exists(paths.root)
 
 
 def test_schema_context_reads_current_schema_each_time(tmp_path: Path) -> None:
