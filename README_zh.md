@@ -12,7 +12,15 @@ DeerFlow 是一个开源的超级智能体运行框架，用来承载长时间�
 
 官网：[deerflow.tech](https://deerflow.tech)
 
-## 项目定位
+![DeerFlow Agentic Wiki Framework](./docs/assets/deerflow-agentic-wiki-framework.svg)
+
+## 这是什么？
+
+DeerFlow 把“聊天式 Agent”扩展成一个可维护的工作系统。它可以阅读资料、操作文件、调用工具、分发子任务、生成产物，并把有价值的结果沉淀到长期记忆和 wiki 结构中。
+
+LLM Wiki 是这个项目的核心思想之一：不要每次提问都从原始 chunk 里重新检索和拼接，而是让 Agent 把知识编译成一个持久 wiki，再随着新资料、新回答、新矛盾和新研究方向持续维护它。
+
+## 系统闭环
 
 DeerFlow 不是单一聊天机器人，也不是只有工具调用的 prompt chain。它更像一个 Agent 操作系统：
 
@@ -22,6 +30,41 @@ DeerFlow 不是单一聊天机器人，也不是只有工具调用的 prompt cha
 4. 在隔离沙箱中执行代码、读写文件和生成产物。
 5. 通过 Memory 和 Agentic Wiki 沉淀长期上下文。
 6. 输出报告、幻灯片、图表、媒体、代码或可维护的 wiki 页面。
+
+```mermaid
+flowchart LR
+    U["Human<br/>问题 + 资料策展"] --> A["Lead Agent<br/>规划 + 路由"]
+    A --> W["Agentic Wiki<br/>已编译知识"]
+    A --> T["Tools + MCP<br/>搜索、抓取、API"]
+    A --> S["Sandbox<br/>文件、bash、代码"]
+    A --> G["Sub-agents<br/>并行子任务"]
+    S --> O["Artifacts<br/>报告、PPT、图表、代码、媒体"]
+    G --> O
+    W --> A
+    O --> R["Archive / Memory<br/>沉淀有价值结果"]
+    R --> W
+```
+
+## LLM Wiki 思想来源
+
+DeerFlow 的 wiki 层参考了 [nashsu/llm_wiki](https://github.com/nashsu/llm_wiki) 所体现的核心模式：原始资料保持不可变，LLM 维护结构化 Markdown wiki，schema 文件定义知识库如何组织和演化。
+
+DeerFlow 保留的核心思想：
+
+- **Raw Sources -> Wiki -> Schema** 三层知识架构。
+- **Ingest、Query、Lint** 三个基础维护动作。
+- `index.md` 作为内容目录，`log.md` 作为按时间追加的操作记录。
+- `[[wikilink]]` 式交叉引用和 Markdown-first 存储。
+- 人负责资料策展和提出问题，LLM 负责维护结构。
+
+DeerFlow 在此基础上加入的能力：
+
+- LangGraph 主 Agent 可以在更大的工具任务中使用 wiki。
+- 子 Agent 分工处理报告小节、分析分支和实现任务。
+- 沙箱执行文件操作、命令和代码，能生成真实产物。
+- Skills 覆盖研究、PPT、图表、GPT 生图/视频、代码文档和领域工作流。
+- MCP、IM 通道、长期记忆和 Gateway API。
+- wiki 专用工具覆盖创建、导入、搜索、同步、检查、修复、schema 演化、回答回写和报告上下文包。
 
 ## 核心能力
 
@@ -59,6 +102,40 @@ Agentic Wiki 是这个项目的重点能力。它不是对原始 chunk 做一次
 - **报告准备**：`wiki_plan_report` 和 `wiki_get_report_context` 为深度研究报告和子 Agent 任务准备基于 wiki 的上下文包。
 
 这个机制让研究过程变成可累积的资产：有价值的资料和回答会继续增强 wiki，而不是留在一次性聊天记录里。
+
+```mermaid
+flowchart TD
+    S["把资料放入 raw/sources"] --> C["转换为 Markdown cache"]
+    C --> I["LLM ingest<br/>source summary + 互链页面"]
+    I --> P["Wiki pages<br/>entities, concepts, synthesis, comparisons"]
+    P --> Q["查询已编译 wiki"]
+    Q --> A["有依据的回答或报告上下文包"]
+    A --> H{"值得沉淀？"}
+    H -->|是| R["回写到 wiki"]
+    H -->|否| E["只作为聊天回答"]
+    R --> L["Lint + Repair + Schema Evolution"]
+    L --> P
+```
+
+## 视觉与生成层
+
+DeerFlow 不只输出文本报告。通过 Skills 和沙箱工具，它可以把基于 wiki 的研究结果继续变成视觉产物：
+
+- 从 Markdown 或 Mermaid 生成框架图和架构图
+- 从数据文件生成图表和分析图
+- 从研究大纲生成 PPT
+- 生成 GPT 生图提示词和媒体资产
+- 支持视频、播客、newsletter 和网页生成工作流
+
+README 主视觉的 GPT 生图提示词可以这样写：
+
+```text
+Create a clean technical hero illustration for an open-source AI agent framework named DeerFlow.
+Show a central "Agentic Wiki" knowledge graph connected to raw documents, a lead agent,
+sub-agents, sandbox execution, tools/MCP, memory, and generated artifacts.
+Style: polished dark-mode product architecture visual, crisp labels, subtle cyan/green/purple accents,
+not cartoonish, no mascot, no watermark, suitable for a GitHub README.
+```
 
 ## 架构
 

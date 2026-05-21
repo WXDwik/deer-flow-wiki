@@ -12,7 +12,15 @@ Version 2.0 is a ground-up rewrite. The original deep research framework remains
 
 Official site: [deerflow.tech](https://deerflow.tech)
 
-## Why DeerFlow
+![DeerFlow Agentic Wiki Framework](./docs/assets/deerflow-agentic-wiki-framework.svg)
+
+## What Is This?
+
+DeerFlow turns a chat-based agent into a maintained work system. It can read sources, operate on files, call tools, delegate work, generate artifacts, and keep the results in durable memory and wiki structures.
+
+The LLM Wiki idea is central: instead of retrieving raw chunks on every question, DeerFlow lets the agent compile knowledge into a persistent wiki, then keep that wiki current as new files, answers, contradictions, and research directions appear.
+
+## System Loop
 
 Most agent stacks stop at chat plus tools. DeerFlow is built around a stronger loop:
 
@@ -24,6 +32,41 @@ Most agent stacks stop at chat plus tools. DeerFlow is built around a stronger l
 6. Produce artifacts such as reports, slides, charts, generated media, code, or maintained wiki pages.
 
 The result is closer to an agent operating system than a single prompt chain.
+
+```mermaid
+flowchart LR
+    U["Human<br/>questions + source curation"] --> A["Lead Agent<br/>plan + route"]
+    A --> W["Agentic Wiki<br/>compiled knowledge"]
+    A --> T["Tools + MCP<br/>search, crawl, APIs"]
+    A --> S["Sandbox<br/>files, bash, code"]
+    A --> G["Sub-agents<br/>parallel subtasks"]
+    S --> O["Artifacts<br/>reports, slides, charts, code, media"]
+    G --> O
+    W --> A
+    O --> R["Archive / Memory<br/>keep useful results"]
+    R --> W
+```
+
+## LLM Wiki Inspiration
+
+DeerFlow's wiki layer follows the same broad pattern described by [nashsu/llm_wiki](https://github.com/nashsu/llm_wiki): raw sources stay immutable, the LLM maintains a structured Markdown wiki, and schema files define how the knowledge base should evolve.
+
+What DeerFlow keeps from that pattern:
+
+- **Raw Sources -> Wiki -> Schema** as the core knowledge architecture.
+- **Ingest, Query, Lint** as the basic maintenance loop.
+- `index.md` as the content catalog and `log.md` as the chronological operation trail.
+- `[[wikilink]]` style cross-references and Markdown-first storage.
+- The role split: humans curate and ask; the LLM maintains structure.
+
+What DeerFlow adds around it:
+
+- A LangGraph lead agent that can use the wiki during broader tool-using tasks.
+- Sub-agent delegation for report sections, analysis branches, and implementation work.
+- Sandboxed file and command execution for producing real artifacts.
+- Skills for research, slides, charts, image/video generation, code documentation, and domain workflows.
+- MCP integration, IM channels, persistent memory, and Gateway APIs.
+- Wiki-specific tools for create, ingest, search, sync, lint, repair, schema evolution, answer archival, and report context packaging.
 
 ## Core Features
 
@@ -61,6 +104,40 @@ The wiki is the main knowledge feature in this project. It is not ordinary RAG o
 - **Report prep**: `wiki_plan_report` and `wiki_get_report_context` prepare grounded context packs for deep research reports and sub-agent work.
 
 This turns research into a cumulative artifact: each useful source and answer can strengthen the wiki rather than disappear into chat history.
+
+```mermaid
+flowchart TD
+    S["Drop sources into raw/sources"] --> C["Convert to Markdown cache"]
+    C --> I["LLM ingest<br/>source summaries + linked pages"]
+    I --> P["Wiki pages<br/>entities, concepts, synthesis, comparisons"]
+    P --> Q["Query against compiled wiki"]
+    Q --> A["Grounded answer or report context"]
+    A --> H{"Worth keeping?"}
+    H -->|yes| R["Archive answer back to wiki"]
+    H -->|no| E["Leave as chat response"]
+    R --> L["Lint + repair + schema evolution"]
+    L --> P
+```
+
+## Visual and Generation Layer
+
+DeerFlow is not limited to text reports. Through skills and sandbox tools it can turn wiki-grounded work into visual outputs:
+
+- diagrams and architecture maps from Markdown or Mermaid
+- charts and analytical graphics from data files
+- slide decks from research outlines
+- GPT-style image generation prompts and generated media assets
+- video, podcast, newsletter, and web-page generation workflows
+
+README banner prompt used for the framework image concept:
+
+```text
+Create a clean technical hero illustration for an open-source AI agent framework named DeerFlow.
+Show a central "Agentic Wiki" knowledge graph connected to raw documents, a lead agent,
+sub-agents, sandbox execution, tools/MCP, memory, and generated artifacts.
+Style: polished dark-mode product architecture visual, crisp labels, subtle cyan/green/purple accents,
+not cartoonish, no mascot, no watermark, suitable for a GitHub README.
+```
 
 ## Architecture
 
