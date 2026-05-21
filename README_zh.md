@@ -12,7 +12,7 @@ DeerFlow 是一个开源的超级智能体运行框架，用来承载长时间�
 
 官网：[deerflow.tech](https://deerflow.tech)
 
-![DeerFlow Agentic Wiki Framework](./docs/assets/deerflow-agentic-wiki-framework.svg)
+![DeerFlow 智能体知识闭环](./docs/assets/deerflow-agentic-wiki-framework-zh.svg)
 
 ## 这是什么？
 
@@ -33,15 +33,15 @@ DeerFlow 不是单一聊天机器人，也不是只有工具调用的 prompt cha
 
 ```mermaid
 flowchart LR
-    U["Human<br/>问题 + 资料策展"] --> A["Lead Agent<br/>规划 + 路由"]
-    A --> W["Agentic Wiki<br/>已编译知识"]
-    A --> T["Tools + MCP<br/>搜索、抓取、API"]
-    A --> S["Sandbox<br/>文件、bash、代码"]
-    A --> G["Sub-agents<br/>并行子任务"]
-    S --> O["Artifacts<br/>报告、PPT、图表、代码、媒体"]
+    U["人类<br/>问题 + 资料策展"] --> A["主智能体<br/>规划 + 路由"]
+    A --> W["智能体知识库<br/>已编译知识"]
+    A --> T["工具 + MCP<br/>搜索、抓取、API"]
+    A --> S["沙箱<br/>文件、命令、代码"]
+    A --> G["子智能体<br/>并行子任务"]
+    S --> O["产物<br/>报告、PPT、图表、代码、媒体"]
     G --> O
     W --> A
-    O --> R["Archive / Memory<br/>沉淀有价值结果"]
+    O --> R["归档 / 记忆<br/>沉淀有价值结果"]
     R --> W
 ```
 
