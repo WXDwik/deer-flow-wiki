@@ -7,23 +7,23 @@ deep research workflow.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass
 import math
 import re
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from deerflow.wiki.markdown import extract_wikilinks
 from deerflow.wiki.paths import WikiPaths
-from deerflow.wiki.query import search_wiki
+from deerflow.wiki.query import qmd_query_wiki, search_wiki
 from deerflow.wiki.repository import WikiRepository
 
-_DEFAULT_MAX_EXCERPT_CHARS = 3000
 _DEFAULT_PAGE_CHARS = 6000
 _DEFAULT_TOTAL_CHARS = 30000
 _GRAPH_EXPANSION_LIMIT = 3
 _GRAPH_MIN_RELEVANCE = 2.0
+_GRAPH_CONTEXT_RATIO = 0.30
 
 _TYPE_AFFINITY: dict[str, dict[str, float]] = {
     "entity": {"concept": 1.2, "entity": 0.8, "source": 1.0, "synthesis": 1.0, "query": 0.8},
@@ -59,12 +59,6 @@ _REPORT_DIMENSION_QUERY_PARTS = (
 )
 
 
-def _read_excerpt(path: Path, max_chars: int = _DEFAULT_MAX_EXCERPT_CHARS) -> str:
-    if not path.is_file():
-        return ""
-    return path.read_text(encoding="utf-8", errors="ignore")[:max_chars].strip()
-
-
 def _page_type_from_path(path: str) -> str | None:
     parts = path.replace("\\", "/").split("/")
     if len(parts) < 2 or parts[0] != "wiki":
@@ -85,17 +79,6 @@ def _index_pages_by_path(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if not isinstance(pages, list):
         return {}
     return {str(item.get("path")): item for item in pages if isinstance(item, dict) and item.get("path")}
-
-
-def _page_payload_from_index(page: dict[str, Any]) -> dict[str, Any]:
-    path = str(page.get("path") or "")
-    return {
-        "title": str(page.get("title") or Path(path).stem),
-        "path": path,
-        "page_type": page.get("page_type") or _page_type_from_path(path),
-        "tags": page.get("tags", []),
-        "sources": page.get("sources", []),
-    }
 
 
 def _query_terms(query: str) -> list[str]:
@@ -290,7 +273,7 @@ def _wiki_page_path(paths: WikiPaths, rel_path: str) -> Path | None:
     return candidate
 
 
-def _collect_search_candidates(
+def _collect_research_candidates(
     paths: WikiPaths,
     queries: list[str],
     *,
@@ -300,89 +283,171 @@ def _collect_search_candidates(
     matched_queries: dict[str, list[str]] = defaultdict(list)
 
     for query in queries:
-        for result in search_wiki(paths, query, limit=max_results_per_query):
+        results = qmd_query_wiki(paths, query, limit=max_results_per_query)
+        retrieval_source = "qmd_query"
+        if results is None:
+            results = search_wiki(paths, query, limit=max_results_per_query)
+            retrieval_source = "fallback"
+        for result in results:
             page_path = _wiki_page_path(paths, result.path)
             if page_path is None:
                 continue
             existing = candidates.get(result.path)
-            if existing is None or result.score > existing["score"]:
+            if existing is None or result.score > float(existing.get("score") or 0):
                 candidates[result.path] = {
                     "title": result.title,
                     "path": result.path,
                     "score": result.score,
                     "snippet": result.snippet,
+                    "retrieval_source": retrieval_source,
                 }
+            elif retrieval_source == "qmd_query" and existing.get("retrieval_source") == "fallback":
+                existing["retrieval_source"] = "qmd_query"
             matched_queries[result.path].append(query)
 
-    ordered = sorted(candidates.values(), key=lambda item: item["score"], reverse=True)
+    ordered = sorted(
+        candidates.values(),
+        key=lambda item: (
+            0 if item.get("retrieval_source") == "qmd_query" else 1,
+            -float(item.get("score") or 0),
+            str(item.get("path") or ""),
+        ),
+    )
     for item in ordered:
         item["matched_queries"] = matched_queries.get(item["path"], [])
     return ordered
 
 
-def plan_report(
-    paths: WikiPaths,
-    report_goal: str,
+def _normalize_for_match(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _normalized_index(text: str) -> tuple[str, list[int]]:
+    chars: list[str] = []
+    indexes: list[int] = []
+    in_space = False
+    for index, char in enumerate(text):
+        if char.isspace():
+            if not in_space:
+                chars.append(" ")
+                indexes.append(index)
+                in_space = True
+            continue
+        chars.append(char.lower())
+        indexes.append(index)
+        in_space = False
+    return "".join(chars).strip(), indexes
+
+
+def _snippet_phrases(snippet: str) -> list[str]:
+    normalized = _normalize_for_match(snippet)
+    if not normalized:
+        return []
+    phrases = [normalized[:160], normalized[:100], normalized[:60]]
+    words = [word for word in re.split(r"\s+", normalized) if len(word) > 2]
+    for size in (12, 8, 5):
+        if len(words) >= size:
+            phrases.append(" ".join(words[:size]))
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for phrase in phrases:
+        phrase = phrase.strip()
+        if len(phrase) >= 20 and phrase not in seen:
+            deduped.append(phrase)
+            seen.add(phrase)
+    return deduped
+
+
+def _window_around(text: str, start: int, end: int, limit: int) -> str:
+    if len(text) <= limit:
+        return text.strip()
+    match_len = max(end - start, 1)
+    before = max((limit - match_len) // 2, 0)
+    window_start = max(start - before, 0)
+    window_end = min(window_start + limit, len(text))
+    window_start = max(window_end - limit, 0)
+    return text[window_start:window_end].strip()
+
+
+def _content_from_snippet_window(text: str, snippet: str, limit: int) -> str | None:
+    normalized_text, index_map = _normalized_index(text)
+    if not normalized_text or not index_map:
+        return None
+    for phrase in _snippet_phrases(snippet):
+        position = normalized_text.find(phrase)
+        if position < 0:
+            continue
+        start = index_map[min(position, len(index_map) - 1)]
+        end_position = min(position + len(phrase) - 1, len(index_map) - 1)
+        end = index_map[end_position] + 1
+        return _window_around(text, start, end, limit)
+    return None
+
+
+def _terms_from_texts(*texts: str) -> list[str]:
+    seen: set[str] = set()
+    terms: list[str] = []
+    for text in texts:
+        for term in _query_terms(text):
+            if term not in seen:
+                seen.add(term)
+                terms.append(term)
+    return terms
+
+
+def _content_from_paragraphs(text: str, terms: list[str], limit: int) -> str | None:
+    if not terms:
+        return None
+    paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()]
+    scored: list[tuple[int, int, str]] = []
+    for index, paragraph in enumerate(paragraphs):
+        lower = paragraph.lower()
+        score = sum(lower.count(term) for term in terms)
+        if paragraph.startswith("#"):
+            score += sum(term in lower for term in terms)
+        if score > 0:
+            scored.append((score, index, paragraph))
+    if not scored:
+        return None
+    selected = sorted(scored, key=lambda item: (-item[0], item[1]))[:6]
+    selected.sort(key=lambda item: item[1])
+    chunks: list[str] = []
+    remaining = limit
+    for _, _, paragraph in selected:
+        if remaining <= 0:
+            break
+        chunk = paragraph[:remaining].strip()
+        if chunk:
+            chunks.append(chunk)
+            remaining -= len(chunk) + 2
+    return "\n\n".join(chunks).strip() or None
+
+
+def _build_bounded_page_content(
+    text: str,
     *,
-    report_type: str = "deep_research",
-    max_queries: int = 8,
-    max_results_per_query: int = 4,
-) -> dict[str, Any]:
-    """Return wiki inventory and retrieval suggestions for report planning."""
-    repo = WikiRepository(paths)
-    config = repo.read_config()
-    index = repo.read_index()
-    pages_by_path = _index_pages_by_path(index)
-    sources = [item for item in index.get("sources", []) if isinstance(item, dict)]
-    pages = [item for item in index.get("pages", []) if isinstance(item, dict)]
+    snippet: str,
+    terms: list[str],
+    max_chars: int,
+) -> tuple[str, str, bool]:
+    limit = max(1, max_chars)
+    stripped = text.strip()
+    if len(stripped) <= limit:
+        return stripped, "full", False
 
-    page_type_counts: dict[str, int] = {}
-    tags: set[str] = set()
-    for page in pages:
-        page_type = str(page.get("page_type") or _page_type_from_path(str(page.get("path") or "")) or "unknown")
-        page_type_counts[page_type] = page_type_counts.get(page_type, 0) + 1
-        for tag in page.get("tags", []) if isinstance(page.get("tags"), list) else []:
-            if isinstance(tag, str) and tag.strip():
-                tags.add(tag.strip())
+    if snippet:
+        snippet_content = _content_from_snippet_window(stripped, snippet, limit)
+        if snippet_content:
+            return snippet_content, "snippet_window", True
 
-    queries = _suggest_queries(report_goal, max(1, max_queries))
-    candidates = _collect_search_candidates(paths, queries, max_results_per_query=max(1, max_results_per_query))
-    for candidate in candidates:
-        indexed = pages_by_path.get(candidate["path"])
-        if indexed:
-            candidate.update(_page_payload_from_index(indexed))
-        else:
-            candidate["page_type"] = _page_type_from_path(candidate["path"])
+    paragraph_content = _content_from_paragraphs(stripped, terms, limit)
+    if paragraph_content:
+        return paragraph_content, "paragraph_match", True
 
-    return {
-        "root": str(paths.root),
-        "title": config.get("title") or paths.root.name,
-        "language": config.get("language"),
-        "report_goal": report_goal,
-        "report_type": report_type,
-        "wiki_profile": {
-            "purpose_excerpt": _read_excerpt(paths.purpose_file),
-            "schema_excerpt": _read_excerpt(paths.schema_file),
-            "overview_excerpt": _read_excerpt(paths.wiki_overview_file),
-            "source_count": len(sources),
-            "page_count": len(pages),
-            "page_type_counts": page_type_counts,
-            "tags": sorted(tags)[:50],
-            "sample_pages": [_page_payload_from_index(page) for page in pages[:20]],
-        },
-        "suggested_wiki_queries": queries,
-        "candidate_pages": candidates,
-        "recommended_agent_flow": [
-            "Lead agent loads the deep-research skill and designs the report sections.",
-            "Lead agent uses candidate_pages as the wiki research map, then requests focused context packs per section.",
-            "Lead agent delegates section tasks to subagents with the assigned context pack included in each prompt.",
-            "Subagents draft their assigned sections and identify gaps or conflicts.",
-            "Lead agent synthesizes the final report instead of concatenating section drafts.",
-        ],
-    }
+    return stripped[:limit].strip(), "leading_excerpt", True
 
 
-def get_report_context(
+def research_context(
     paths: WikiPaths,
     research_task: str,
     *,
@@ -391,7 +456,7 @@ def get_report_context(
     max_chars_per_page: int = _DEFAULT_PAGE_CHARS,
     total_char_budget: int = _DEFAULT_TOTAL_CHARS,
 ) -> dict[str, Any]:
-    """Build a bounded wiki context pack for one research-report subtask."""
+    """Build a unified QMD-query + graph-expanded context pack for complex research."""
     repo = WikiRepository(paths)
     index = repo.read_index()
     pages_by_path = _index_pages_by_path(index)
@@ -403,22 +468,45 @@ def get_report_context(
     if not query_list:
         query_list = _suggest_queries("", max_pages)
 
-    candidates = _collect_search_candidates(paths, query_list, max_results_per_query=max(1, max_pages))
-
-    seed_candidates = candidates[:max(1, max_pages)]
+    page_limit = max(1, max_pages)
+    search_candidates = _collect_research_candidates(paths, query_list, max_results_per_query=page_limit)
+    seed_candidates = search_candidates[:page_limit]
     graph_expansions = _expand_graph_candidates(paths, index, seed_candidates)
-    seed_paths = {str(item.get("path") or "") for item in seed_candidates}
 
-    ordered_candidates: list[tuple[int, dict[str, Any]]] = []
-    for candidate in seed_candidates:
+    graph_quota = 0
+    if graph_expansions:
+        max_graph_pages = max(1, int(page_limit * _GRAPH_CONTEXT_RATIO))
+        graph_quota = min(max_graph_pages, max(page_limit - 1, 0) if seed_candidates else page_limit)
+    qmd_quota = max(page_limit - graph_quota, 0)
+    selected: list[tuple[int, dict[str, Any]]] = []
+
+    for candidate in seed_candidates[:qmd_quota or page_limit]:
         priority = 0 if _candidate_title_match(candidate, research_task) else 1
-        candidate["retrieval_source"] = candidate.get("retrieval_source") or "search"
-        ordered_candidates.append((priority, candidate))
+        selected.append((priority, candidate))
+
+    graph_added = 0
+    seed_paths = {str(item.get("path") or "") for item in seed_candidates}
     for candidate in graph_expansions:
-        if str(candidate.get("path") or "") not in seed_paths:
-            ordered_candidates.append((2, candidate))
-    if not ordered_candidates and paths.wiki_overview_file.is_file():
-        ordered_candidates.append(
+        if graph_added >= graph_quota:
+            break
+        if str(candidate.get("path") or "") in seed_paths:
+            continue
+        selected.append((2, candidate))
+        graph_added += 1
+
+    if len(selected) < page_limit:
+        selected_paths = {str(candidate.get("path") or "") for _, candidate in selected}
+        for candidate in seed_candidates:
+            if len(selected) >= page_limit:
+                break
+            if str(candidate.get("path") or "") in selected_paths:
+                continue
+            priority = 0 if _candidate_title_match(candidate, research_task) else 1
+            selected.append((priority, candidate))
+            selected_paths.add(str(candidate.get("path") or ""))
+
+    if not selected and paths.wiki_overview_file.is_file():
+        selected.append(
             (
                 3,
                 {
@@ -432,13 +520,16 @@ def get_report_context(
                 },
             )
         )
-    ordered_candidates.sort(key=lambda item: (item[0], -float(item[1].get("score") or 0), str(item[1].get("path") or "")))
+
+    selected.sort(key=lambda item: (item[0], -float(item[1].get("score") or 0), str(item[1].get("path") or "")))
 
     context_pages: list[dict[str, Any]] = []
     remaining = max(0, total_char_budget)
     seen_paths: set[str] = set()
-    for priority, candidate in ordered_candidates:
-        if len(context_pages) >= max_pages or remaining <= 0:
+    terms = _terms_from_texts(research_task, *query_list, *(str(item.get("title") or "") for _, item in selected))
+
+    for priority, candidate in selected:
+        if len(context_pages) >= page_limit or remaining <= 0:
             break
         rel_path = str(candidate.get("path") or "")
         if rel_path in seen_paths:
@@ -447,26 +538,35 @@ def get_report_context(
         if page_path is None:
             continue
         content_limit = min(max(1, max_chars_per_page), remaining)
-        content = page_path.read_text(encoding="utf-8", errors="ignore")[:content_limit].strip()
+        text = page_path.read_text(encoding="utf-8", errors="ignore")
+        content, content_strategy, truncated = _build_bounded_page_content(
+            text,
+            snippet=str(candidate.get("snippet") or ""),
+            terms=terms,
+            max_chars=content_limit,
+        )
         remaining -= len(content)
         seen_paths.add(rel_path)
 
         indexed = pages_by_path.get(rel_path, {})
-        payload = {
-            "title": candidate.get("title") or indexed.get("title") or page_path.stem,
-            "path": rel_path,
-            "page_type": indexed.get("page_type") or candidate.get("page_type") or _page_type_from_path(rel_path),
-            "priority": priority,
-            "retrieval_source": candidate.get("retrieval_source") or ("graph" if priority == 2 else "search"),
-            "score": candidate.get("score"),
-            "matched_queries": candidate.get("matched_queries", []),
-            "snippet": candidate.get("snippet", ""),
-            "tags": indexed.get("tags", []),
-            "sources": indexed.get("sources", []),
-            "content": content,
-            "truncated": len(content) >= content_limit and page_path.stat().st_size > content_limit,
-        }
-        context_pages.append(payload)
+        retrieval_source = candidate.get("retrieval_source") or ("graph" if priority == 2 else "qmd_query")
+        context_pages.append(
+            {
+                "title": candidate.get("title") or indexed.get("title") or page_path.stem,
+                "path": rel_path,
+                "page_type": indexed.get("page_type") or candidate.get("page_type") or _page_type_from_path(rel_path),
+                "priority": priority,
+                "retrieval_source": retrieval_source,
+                "score": candidate.get("score"),
+                "matched_queries": candidate.get("matched_queries", []),
+                "snippet": candidate.get("snippet", ""),
+                "tags": indexed.get("tags", []),
+                "sources": indexed.get("sources", []),
+                "content": content,
+                "content_strategy": content_strategy,
+                "truncated": truncated,
+            }
+        )
 
     return {
         "root": str(paths.root),
@@ -477,18 +577,21 @@ def get_report_context(
         "total_chars": sum(len(page["content"]) for page in context_pages),
         "insufficient_context": len(context_pages) == 0,
         "retrieval": {
-            "search_candidate_count": len(seed_candidates),
+            "mode": "qmd_query_graph_context",
+            "qmd_candidate_count": len(seed_candidates),
             "graph_expansion_count": len(graph_expansions),
+            "graph_quota": graph_quota,
             "priority_order": {
-                "0": "title match search pages",
-                "1": "content/snippet search pages",
+                "0": "title match qmd query pages",
+                "1": "qmd query pages",
                 "2": "graph-expanded pages",
                 "3": "overview fallback",
             },
         },
         "usage_guidance": [
-            "Use this pack as the primary local wiki evidence for the delegated section.",
+            "Use this pack as the primary local wiki evidence for complex answers or report sections.",
+            "Treat snippets as retrieval previews and content as the bounded evidence body.",
             "If the pack is thin or contradictory, report the gap instead of inventing missing evidence.",
-            "Keep the output scoped to the delegated section so the lead agent can synthesize the final report.",
         ],
     }
+

@@ -101,7 +101,7 @@ The wiki is the main knowledge feature in this project. It is not ordinary RAG o
 - **Maintain**: `wiki_lint` checks broken links, orphan pages, missing outlinks, stale claims, contradictions, and missing pages. `wiki_repair_lint` can propose or apply safe Markdown repairs.
 - **Evolve**: `wiki_evolve_schema` updates the wiki schema contract when the knowledge base needs new page types or maintenance rules.
 - **Archive**: `wiki_archive_answer` decides whether an answer is worth writing back as a query, synthesis, comparison, or page update.
-- **Report prep**: `wiki_plan_report` and `wiki_get_report_context` prepare grounded context packs for deep research reports and sub-agent work.
+- **Research context**: `wiki_research_context` uses QMD query retrieval, wiki graph expansion, and bounded page excerpts for complex questions, deep research reports, and sub-agent work.
 
 This turns research into a cumulative artifact: each useful source and answer can strengthen the wiki rather than disappear into chat history.
 

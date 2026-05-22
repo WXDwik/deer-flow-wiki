@@ -99,7 +99,7 @@ Agentic Wiki 是这个项目的重点能力。它不是对原始 chunk 做一次
 - **维护**：`wiki_lint` 检查断链、孤立页、缺少出链、过期内容、矛盾和缺失页面；`wiki_repair_lint` 可以提出或应用受限的 Markdown 修复。
 - **演化**：`wiki_evolve_schema` 在知识库需要新页面类型或维护规则时更新 wiki schema 契约。
 - **回写**：`wiki_archive_answer` 判断一次回答是否值得沉淀为 query、synthesis、comparison 或已有页面更新。
-- **报告准备**：`wiki_plan_report` 和 `wiki_get_report_context` 为深度研究报告和子 Agent 任务准备基于 wiki 的上下文包。
+- **研究上下文**：`wiki_research_context` 使用 QMD query 检索、wiki 图谱扩展和有界页面摘录，为复杂问题、深度研究报告和子 Agent 任务准备基于 wiki 的证据包。
 
 这个机制让研究过程变成可累积的资产：有价值的资料和回答会继续增强 wiki，而不是留在一次性聊天记录里。
 

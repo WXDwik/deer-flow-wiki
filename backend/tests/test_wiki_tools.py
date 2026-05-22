@@ -147,6 +147,7 @@ def test_wiki_tools_include_source_status_tool() -> None:
     assert "wiki_sync_sources" in tool_names
     assert "wiki_add_source" in tool_names
     assert "wiki_add_sources" not in tool_names
-    assert "wiki_plan_report" in tool_names
-    assert "wiki_get_report_context" in tool_names
+    assert "wiki_plan_report" not in tool_names
+    assert "wiki_get_report_context" not in tool_names
+    assert "wiki_research_context" in tool_names
     assert "wiki_evolve_schema" in tool_names

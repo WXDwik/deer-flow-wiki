@@ -1,127 +1,169 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from deerflow.wiki import query as query_module
+from deerflow.wiki import report as report_module
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.scaffold import create_wiki_database
-from deerflow.wiki.service import get_report_context, plan_report
+from deerflow.wiki.service import research_context
 
 
-def _seed_report_wiki(tmp_path: Path):
-    paths = create_wiki_database(str(tmp_path / "wiki"), title="Anomaly Detection Wiki")
-    page = paths.wiki_concepts_dir / "uadformer.md"
-    page.write_text(
-        "# UADFormer\n\n"
-        "UADFormer is a transformer method for time series anomaly detection. "
-        "It discusses model architecture, datasets, experiments, comparisons, "
-        "limitations, and future work.",
-        encoding="utf-8",
-    )
-    WikiRepository(paths).write_index(
-        {
-            "sources": [
-                {
-                    "source_id": "source-1",
-                    "title": "UADFormer paper",
-                    "path": "raw/sources/uadformer.pdf",
-                    "sha256": "abc",
-                }
-            ],
-            "pages": [
-                {
-                    "page_id": "page-1",
-                    "title": "UADFormer",
-                    "path": "wiki/concepts/uadformer.md",
-                    "page_type": "concept",
-                    "tags": ["anomaly-detection"],
-                    "sources": ["source-1"],
-                }
-            ],
-        }
-    )
-    return paths
-
-
-def test_plan_report_returns_wiki_inventory_and_candidate_pages(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
-    paths = _seed_report_wiki(tmp_path)
-
-    result = plan_report(str(paths.root), "UADFormer anomaly detection")
-
-    assert result["title"] == "Anomaly Detection Wiki"
-    assert result["wiki_profile"]["source_count"] == 1
-    assert result["wiki_profile"]["page_type_counts"]["concept"] == 1
-    assert "UADFormer anomaly detection" in result["suggested_wiki_queries"]
-    assert result["candidate_pages"][0]["path"] == "wiki/concepts/uadformer.md"
-    assert result["recommended_agent_flow"]
-
-
-def test_plan_report_recognizes_deepresearch_pages(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
+def test_research_context_uses_qmd_query_without_vsearch(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    report = paths.wiki_deepresearch_dir / "AUD-Deep-Research.md"
-    report.write_text(
-        "---\n"
-        "type: deepresearch\n"
-        "title: AUD Deep Research\n"
-        "generated_from_wiki_at: 2026-05-21\n"
-        "---\n\n"
-        "# AUD Deep Research\n\n"
-        "This complete Deep Research report covers UADFormer, MIMO, and activity detection.",
-        encoding="utf-8",
+    page = paths.wiki_concepts_dir / "alpha.md"
+    page.write_text("# Alpha\n\nAlpha method evidence.", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_run_qmd(args: list[str], *, timeout: float, cwd: Path):
+        calls.append(args)
+        if args[:2] == ["collection", "add"] or args == ["update"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if args and args[0] == "query":
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {
+                            "score": 0.9,
+                            "file": "wiki/concepts/alpha.md",
+                            "title": "Alpha",
+                            "snippet": "Alpha method evidence.",
+                        }
+                    ]
+                ),
+                stderr="",
+            )
+        raise AssertionError(f"unexpected qmd args: {args}")
+
+    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "true")
+    monkeypatch.setattr(query_module, "_run_qmd", fake_run_qmd)
+
+    result = research_context(str(paths.root), "Alpha method", max_pages=2)
+
+    assert result["retrieval"]["mode"] == "qmd_query_graph_context"
+    assert result["context_pages"][0]["retrieval_source"] == "qmd_query"
+    assert any(call and call[0] == "query" and "-n" in call and "2" in call for call in calls)
+    assert not any(call and call[0] == "vsearch" for call in calls)
+
+
+def test_research_context_does_not_depend_on_legacy_report_candidate_collection(tmp_path: Path, monkeypatch) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    (paths.wiki_concepts_dir / "alpha.md").write_text("# Alpha\n\nAlpha evidence.", encoding="utf-8")
+
+    def fake_qmd_query(paths_arg, query: str, *, limit: int):
+        return [
+            query_module.SearchResult(
+                path="wiki/concepts/alpha.md",
+                title="Alpha",
+                score=1.0,
+                snippet="Alpha evidence.",
+            )
+        ]
+
+    monkeypatch.setattr(report_module, "qmd_query_wiki", fake_qmd_query)
+    assert not hasattr(report_module, "_collect_search_candidates")
+
+    result = research_context(str(paths.root), "Alpha")
+
+    assert result["context_pages"][0]["path"] == "wiki/concepts/alpha.md"
+
+
+def test_research_context_returns_full_short_page(tmp_path: Path, monkeypatch) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    text = "# Alpha\n\nShort page evidence."
+    (paths.wiki_concepts_dir / "alpha.md").write_text(text, encoding="utf-8")
+
+    monkeypatch.setattr(
+        report_module,
+        "qmd_query_wiki",
+        lambda *args, **kwargs: [
+            query_module.SearchResult(
+                path="wiki/concepts/alpha.md",
+                title="Alpha",
+                score=1.0,
+                snippet="Short page evidence.",
+            )
+        ],
     )
-    WikiRepository(paths).write_index(
-        {
-            "sources": [],
-            "pages": [
-                {
-                    "page_id": "deepresearch-1",
-                    "title": "AUD Deep Research",
-                    "path": "wiki/deepresearch/AUD-Deep-Research.md",
-                    "page_type": "deepresearch",
-                    "tags": ["deep-research"],
-                    "sources": [],
-                }
-            ],
-        }
-    )
 
-    result = plan_report(str(paths.root), "AUD Deep Research")
+    result = research_context(str(paths.root), "Alpha evidence", max_chars_per_page=200)
 
-    assert result["wiki_profile"]["page_type_counts"]["deepresearch"] == 1
-    assert result["candidate_pages"][0]["path"] == "wiki/deepresearch/AUD-Deep-Research.md"
-    assert result["candidate_pages"][0]["page_type"] == "deepresearch"
-
-
-def test_get_report_context_builds_bounded_context_pack(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
-    paths = _seed_report_wiki(tmp_path)
-
-    result = get_report_context(
-        str(paths.root),
-        "model architecture and limitations",
-        queries=["UADFormer transformer limitation"],
-        max_pages=3,
-        max_chars_per_page=80,
-        total_char_budget=80,
-    )
-
-    assert result["page_count"] == 1
     page = result["context_pages"][0]
-    assert page["path"] == "wiki/concepts/uadformer.md"
-    assert page["page_type"] == "concept"
-    assert page["sources"] == ["source-1"]
-    assert len(page["content"]) <= 80
-    assert not result["insufficient_context"]
+    assert page["content"] == text
+    assert page["content_strategy"] == "full"
+    assert not page["truncated"]
 
 
-def test_get_report_context_adds_graph_expansion_after_search_hits(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "0")
+def test_research_context_expands_content_around_qmd_snippet(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    main = paths.wiki_concepts_dir / "alpha.md"
-    related = paths.wiki_concepts_dir / "beta.md"
-    main.write_text("# Alpha\n\nAlpha keyword links to [[Beta]].", encoding="utf-8")
-    related.write_text("# Beta\n\nBeta adds supporting context.", encoding="utf-8")
+    before = "Intro text. " * 80
+    target = "Critical transformer limitation evidence appears here."
+    after = "Extra trailing text. " * 80
+    (paths.wiki_concepts_dir / "alpha.md").write_text(f"# Alpha\n\n{before}{target}{after}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        report_module,
+        "qmd_query_wiki",
+        lambda *args, **kwargs: [
+            query_module.SearchResult(
+                path="wiki/concepts/alpha.md",
+                title="Alpha",
+                score=1.0,
+                snippet=target,
+            )
+        ],
+    )
+
+    result = research_context(str(paths.root), "transformer limitation", max_chars_per_page=220)
+
+    page = result["context_pages"][0]
+    assert target in page["content"]
+    assert page["content_strategy"] == "snippet_window"
+    assert page["truncated"]
+
+
+def test_research_context_falls_back_to_query_matched_paragraph(tmp_path: Path, monkeypatch) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    page_text = (
+        "# Alpha\n\n"
+        "General introduction that is not enough.\n\n"
+        "The evaluation metric paragraph explains anomaly detection precision and recall.\n\n"
+        "Unrelated appendix."
+    )
+    (paths.wiki_concepts_dir / "alpha.md").write_text(page_text, encoding="utf-8")
+
+    monkeypatch.setattr(
+        report_module,
+        "qmd_query_wiki",
+        lambda *args, **kwargs: [
+            query_module.SearchResult(
+                path="wiki/concepts/alpha.md",
+                title="Alpha",
+                score=1.0,
+                snippet="This snippet is not present in the markdown.",
+            )
+        ],
+    )
+
+    result = research_context(str(paths.root), "evaluation metric", max_chars_per_page=90)
+
+    page = result["context_pages"][0]
+    assert "evaluation metric paragraph" in page["content"]
+    assert page["content_strategy"] == "paragraph_match"
+
+
+def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, monkeypatch) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    alpha = paths.wiki_concepts_dir / "alpha.md"
+    beta = paths.wiki_concepts_dir / "beta.md"
+    gamma = paths.wiki_concepts_dir / "gamma.md"
+    alpha.write_text("# Alpha\n\nAlpha keyword links to [[Beta]] and [[Gamma]].", encoding="utf-8")
+    beta.write_text("# Beta\n\nBeta supporting Alpha evidence.\n\n" + ("long beta text " * 200), encoding="utf-8")
+    gamma.write_text("# Gamma\n\nGamma supporting Alpha evidence.\n\n" + ("long gamma text " * 200), encoding="utf-8")
     WikiRepository(paths).write_index(
         {
             "sources": [],
@@ -140,22 +182,41 @@ def test_get_report_context_adds_graph_expansion_after_search_hits(tmp_path: Pat
                     "page_type": "concept",
                     "sources": ["source-1"],
                 },
+                {
+                    "page_id": "gamma",
+                    "title": "Gamma",
+                    "path": "wiki/concepts/gamma.md",
+                    "page_type": "concept",
+                    "sources": ["source-1"],
+                },
             ],
         }
     )
 
-    result = get_report_context(
-        str(paths.root),
-        "Alpha keyword",
-        max_pages=3,
-        max_chars_per_page=1000,
-        total_char_budget=3000,
+    monkeypatch.setattr(
+        report_module,
+        "qmd_query_wiki",
+        lambda *args, **kwargs: [
+            query_module.SearchResult(
+                path="wiki/concepts/alpha.md",
+                title="Alpha",
+                score=1.0,
+                snippet="Alpha keyword links",
+            )
+        ],
     )
 
-    assert [page["path"] for page in result["context_pages"]] == [
-        "wiki/concepts/alpha.md",
-        "wiki/concepts/beta.md",
-    ]
-    assert result["context_pages"][0]["priority"] == 0
-    assert result["context_pages"][1]["priority"] == 2
-    assert result["context_pages"][1]["retrieval_source"] == "graph"
+    result = research_context(
+        str(paths.root),
+        "Alpha evidence",
+        max_pages=3,
+        max_chars_per_page=120,
+        total_char_budget=360,
+    )
+
+    graph_pages = [page for page in result["context_pages"] if page["retrieval_source"] == "graph"]
+    assert [page["retrieval_source"] for page in result["context_pages"]][0] == "qmd_query"
+    assert len(graph_pages) == 1
+    assert len(result["context_pages"]) <= 3
+    assert result["total_chars"] <= 360
+    assert graph_pages[0]["content_strategy"] in {"paragraph_match", "leading_excerpt", "full"}

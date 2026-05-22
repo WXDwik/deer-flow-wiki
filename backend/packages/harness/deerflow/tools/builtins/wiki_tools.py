@@ -235,43 +235,8 @@ def wiki_search_tool(
     return _json_result({"ok": True, "results": result})
 
 
-@tool("wiki_plan_report", parse_docstring=True)
-def wiki_plan_report_tool(
-    runtime: ToolRuntime[ContextT, ThreadState],
-    wiki_name_or_path: str,
-    report_goal: str,
-    report_type: str = "deep_research",
-    max_queries: int = 8,
-    max_results_per_query: int = 4,
-) -> str:
-    """Inspect an LLM Wiki before planning a deep research report.
-
-    Use this tool early in a wiki-grounded research report workflow, after
-    loading the deep-research skill. It returns wiki inventory, suggested wiki
-    retrieval queries, and candidate pages so the lead agent can design report
-    sections and decide what to delegate to subagents.
-
-    Args:
-        wiki_name_or_path: Existing wiki name or filesystem path.
-        report_goal: User's report objective or research question.
-        report_type: Report style, for example "deep_research", "literature_review",
-            "technical_report", or "comparison".
-        max_queries: Maximum suggested wiki queries to generate.
-        max_results_per_query: Maximum candidate pages to collect per query.
-    """
-    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
-    result = service.plan_report(
-        resolved_wiki,
-        report_goal,
-        report_type=report_type,
-        max_queries=max_queries,
-        max_results_per_query=max_results_per_query,
-    )
-    return _json_result({"ok": True, **result})
-
-
-@tool("wiki_get_report_context", parse_docstring=True)
-def wiki_get_report_context_tool(
+@tool("wiki_research_context", parse_docstring=True)
+def wiki_research_context_tool(
     runtime: ToolRuntime[ContextT, ThreadState],
     wiki_name_or_path: str,
     research_task: str,
@@ -280,22 +245,25 @@ def wiki_get_report_context_tool(
     max_chars_per_page: int = 6000,
     total_char_budget: int = 30000,
 ) -> str:
-    """Build a bounded wiki context pack for one report section or subtask.
+    """Build a grounded wiki evidence pack for complex questions and research reports.
 
-    Use this after the lead agent has designed the report and is preparing
-    subagent prompts. The result is meant to be copied into a delegated task
-    prompt as assigned local evidence for that subagent.
+    Use this tool for complex wiki-grounded questions, systematic analysis,
+    deep research, and report preparation. It runs QMD query-mode retrieval,
+    expands the selected pages through the wiki link/source graph, and returns
+    bounded page content under a total character budget. Use wiki_search for
+    simple quick questions; use this tool when snippets alone are not enough.
 
     Args:
         wiki_name_or_path: Existing wiki name or filesystem path.
-        research_task: The specific section question or delegated research task.
-        queries: Optional focused wiki search queries for this section.
-        max_pages: Maximum wiki pages to include in the context pack.
-        max_chars_per_page: Maximum characters to include from each page.
+        research_task: The complex question, report objective, or section task.
+        queries: Optional focused retrieval queries to run in addition to
+            research_task.
+        max_pages: Maximum wiki pages to include in the evidence pack.
+        max_chars_per_page: Maximum characters to include from each selected page.
         total_char_budget: Maximum total wiki content characters in the pack.
     """
     resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
-    result = service.get_report_context(
+    result = service.research_context(
         resolved_wiki,
         research_task,
         queries=queries,
@@ -467,8 +435,7 @@ WIKI_TOOLS = [
     wiki_create_tool,
     wiki_add_source_tool,
     wiki_search_tool,
-    wiki_plan_report_tool,
-    wiki_get_report_context_tool,
+    wiki_research_context_tool,
     wiki_source_status_tool,
     wiki_sync_sources_tool,
     wiki_archive_answer_tool,

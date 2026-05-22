@@ -245,6 +245,26 @@ def _qmd_search_mode(paths: WikiPaths, query: str, *, collection: str, mode: str
     return _parse_qmd_results(paths, result.stdout, limit=limit)
 
 
+def qmd_query_wiki(paths: WikiPaths, query: str, *, limit: int = 10) -> list[SearchResult] | None:
+    """Run QMD's hybrid query mode without DeerFlow-side vsearch/RRF fusion."""
+    if not query.strip() or not _is_qmd_enabled():
+        return None
+
+    timeout = _qmd_timeout_seconds()
+    collection = _qmd_collection_name(paths)
+    collection = _ensure_qmd_collection(paths, collection, timeout=timeout)
+    if collection is None:
+        return None
+    return _qmd_search_mode(
+        paths,
+        query,
+        collection=collection,
+        mode="query",
+        limit=limit,
+        timeout=timeout,
+    )
+
+
 def _rrf_fuse_ranked_results(*ranked_lists: list[SearchResult]) -> list[SearchResult]:
     fused: dict[str, SearchResult] = {}
     scores: dict[str, float] = {}

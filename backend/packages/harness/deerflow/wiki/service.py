@@ -17,8 +17,7 @@ from deerflow.wiki.models import RawSource
 from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root, wiki_layout_exists
 from deerflow.wiki.query import search_wiki
 from deerflow.wiki.repair import repair_lint
-from deerflow.wiki.report import get_report_context as build_report_context
-from deerflow.wiki.report import plan_report as build_report_plan
+from deerflow.wiki.report import research_context as build_research_context
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.scaffold import create_wiki_database
 from deerflow.wiki.schema import evolve_schema as evolve_wiki_schema
@@ -299,26 +298,7 @@ def search(wiki_name_or_path: str, query: str, *, limit: int = 10) -> list[dict]
     return [asdict(result) for result in search_wiki(paths, query, limit=limit)]
 
 
-def plan_report(
-    wiki_name_or_path: str,
-    report_goal: str,
-    *,
-    report_type: str = "deep_research",
-    max_queries: int = 8,
-    max_results_per_query: int = 4,
-) -> dict:
-    """Prepare wiki inventory and retrieval suggestions for a deep research report."""
-    paths = open_wiki(wiki_name_or_path)
-    return build_report_plan(
-        paths,
-        report_goal,
-        report_type=report_type,
-        max_queries=max_queries,
-        max_results_per_query=max_results_per_query,
-    )
-
-
-def get_report_context(
+def research_context(
     wiki_name_or_path: str,
     research_task: str,
     *,
@@ -327,9 +307,9 @@ def get_report_context(
     max_chars_per_page: int = 6000,
     total_char_budget: int = 30000,
 ) -> dict:
-    """Build a bounded wiki context pack for one report subtask."""
+    """Build a unified QMD-query and graph-expanded context pack for complex research."""
     paths = open_wiki(wiki_name_or_path)
-    return build_report_context(
+    return build_research_context(
         paths,
         research_task,
         queries=queries,

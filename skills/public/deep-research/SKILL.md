@@ -40,14 +40,22 @@ This skill provides a systematic methodology for conducting thorough research wi
 
 For complex research reports, the lead agent owns planning and final synthesis. Subagents own isolated section-level research tasks.
 
+### Subagent Preflight
+
+Before starting a complex problem or deep research report, check whether the `task` tool is available and decide whether subagents would improve coverage, focus, or parallelism.
+
+- If `task` is available, you may use subagents for complex questions, multi-angle investigations, and deep research reports. Decompose the work into independent section tasks when parallel section-level research would improve the result.
+- If `task` is not available, subagents are not enabled for this run. Continue in single-agent mode, and mention Ultra/subagent mode only when the user explicitly expects multi-agent execution or the task would materially benefit from it.
+- Do not treat `wiki_research_context` as a replacement for subagents. It prepares evidence packs; `task` can perform parallel section research when subagent mode is available and useful.
+
 Recommended flow:
 
 1. **Classify the task**: Decide whether this is a deep research report, a lighter answer, a literature review, a technical report, or a comparison.
 2. **Map evidence sources**: Decide what must come from web search/fetch and what should come from local wiki knowledge.
-3. **Inspect wiki knowledge if available**: Call `wiki_plan_report` with the report goal and wiki name/path to get inventory, suggested wiki queries, and candidate pages.
-4. **Do initial broad research**: Use web search/fetch and wiki planning results to understand the topic landscape before decomposition.
+3. **Gather wiki evidence if available**: Call `wiki_research_context` with the report goal and wiki name/path to get a QMD-query + graph-expanded evidence pack.
+4. **Do initial broad research**: Use web search/fetch and wiki evidence to understand the topic landscape before decomposition.
 5. **Design report structure**: Decide the sections, research questions, and evidence needs for the final report.
-6. **Prepare assigned context packs**: For each section, call `wiki_get_report_context` with focused queries to build the wiki context pack for that section.
+6. **Prepare assigned context packs**: For each section, call `wiki_research_context` with focused queries to build the wiki context pack for that section.
 7. **Delegate in parallel**: Use `task` to send independent section work to subagents. Include the section objective, assigned wiki context pack, relevant web findings, and output expectations in each task prompt.
 8. **Synthesize, do not concatenate**: After subagents return, the lead agent resolves overlap, contradictions, gaps, ordering, and tone, then writes the final integrated report.
 
@@ -60,9 +68,9 @@ Subagent prompts should be narrow. Do not ask every subagent to write the full r
 Before searching or delegating, decide which information channels are needed:
 
 - Use web search/fetch for current facts, recent developments, external validation, and sources not already in the wiki.
-- Use `wiki_plan_report` when the user names or implies an LLM Wiki / knowledge base.
-- Use `wiki_get_report_context` to prepare focused local evidence packs for individual report sections.
-- Use `wiki_search` only for quick targeted lookups; prefer `wiki_get_report_context` before delegating section work to subagents.
+- Use `wiki_research_context` when the user names or implies an LLM Wiki / knowledge base for a complex question, systematic analysis, or report.
+- Use `wiki_research_context` to prepare focused local evidence packs for individual report sections.
+- Use `wiki_search` only for quick targeted lookups; prefer `wiki_research_context` before delegating section work to subagents.
 
 ### Phase 1: Broad Exploration
 

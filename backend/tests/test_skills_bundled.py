@@ -34,6 +34,5 @@ def test_skills_public_dir_has_skills() -> None:
 def test_deep_research_skill_mentions_wiki_report_flow() -> None:
     content = (SKILLS_PUBLIC_DIR / "deep-research" / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "wiki_plan_report" in content
-    assert "wiki_get_report_context" in content
+    assert "wiki_research_context" in content
     assert "Synthesize, do not concatenate" in content
