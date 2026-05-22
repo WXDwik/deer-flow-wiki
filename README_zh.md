@@ -47,7 +47,9 @@ flowchart LR
 
 ## LLM Wiki 思想来源
 
-DeerFlow 的 wiki 层参考了 [nashsu/llm_wiki](https://github.com/nashsu/llm_wiki) 所体现的核心模式：原始资料保持不可变，LLM 维护结构化 Markdown wiki，schema 文件定义知识库如何组织和演化。
+DeerFlow 的 wiki 层参考了 [karpathy/llm-wiki.md](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) 描述的核心模式：原始资料保持不可变，LLM 维护结构化 Markdown wiki，schema 文件定义知识库如何组织和演化。
+
+关键差异在于，wiki 不是普通检索索引，而是已经编译过的知识层。当新资料、有价值的回答或矛盾出现时，Agent 可以更新 source summary、实体页、概念页、综合页、内容目录和操作日志，让知识库随使用持续积累。
 
 DeerFlow 保留的核心思想：
 
@@ -56,6 +58,7 @@ DeerFlow 保留的核心思想：
 - `index.md` 作为内容目录，`log.md` 作为按时间追加的操作记录。
 - `[[wikilink]]` 式交叉引用和 Markdown-first 存储。
 - 人负责资料策展和提出问题，LLM 负责维护结构。
+- 有价值的回答可以回写到 wiki，而不是只留在一次性聊天记录里。
 
 DeerFlow 在此基础上加入的能力：
 
@@ -264,6 +267,7 @@ scripts/   初始化、诊断、启动、Docker 和配置辅助脚本
 - [Frontend README](./frontend/README.md)
 - [配置指南](./backend/docs/CONFIGURATION.md)
 - [MCP 指南](./backend/docs/MCP_SERVER.md)
+- [LLM Wiki 模式说明](./llm-wiki.md)
 - [LLM Wiki Phase 2 总结](./docs/LLM_WIKI_PHASE_2_SUMMARY.md)
 - [贡献指南](./CONTRIBUTING.md)
 - [安全策略](./SECURITY.md)

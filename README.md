@@ -49,7 +49,9 @@ flowchart LR
 
 ## LLM Wiki Inspiration
 
-DeerFlow's wiki layer follows the same broad pattern described by [nashsu/llm_wiki](https://github.com/nashsu/llm_wiki): raw sources stay immutable, the LLM maintains a structured Markdown wiki, and schema files define how the knowledge base should evolve.
+DeerFlow's wiki layer follows the same broad pattern described by [karpathy/llm-wiki.md](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): raw sources stay immutable, the LLM maintains a structured Markdown wiki, and schema files define how the knowledge base should evolve.
+
+The important shift is that the wiki is compiled knowledge, not just a retrieval index. When new sources, useful answers, or contradictions appear, the agent can update source summaries, entity pages, concept pages, synthesis pages, the content index, and the operation log so the knowledge base compounds over time.
 
 What DeerFlow keeps from that pattern:
 
@@ -58,6 +60,7 @@ What DeerFlow keeps from that pattern:
 - `index.md` as the content catalog and `log.md` as the chronological operation trail.
 - `[[wikilink]]` style cross-references and Markdown-first storage.
 - The role split: humans curate and ask; the LLM maintains structure.
+- The option to file valuable answers back into the wiki instead of leaving them only in chat history.
 
 What DeerFlow adds around it:
 
@@ -266,6 +269,7 @@ Supported model configurations include OpenAI-compatible chat models, OpenAI Res
 - [Frontend README](./frontend/README.md)
 - [Configuration guide](./backend/docs/CONFIGURATION.md)
 - [MCP guide](./backend/docs/MCP_SERVER.md)
+- [LLM Wiki pattern](./llm-wiki.md)
 - [LLM Wiki Phase 2 summary](./docs/LLM_WIKI_PHASE_2_SUMMARY.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Security policy](./SECURITY.md)
