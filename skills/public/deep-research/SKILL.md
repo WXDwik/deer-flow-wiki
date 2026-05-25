@@ -44,10 +44,8 @@ For complex research reports, the lead agent owns planning and final synthesis. 
 
 Before starting a complex problem or deep research report, check whether the `task` tool is available and decide whether subagents would improve coverage, focus, or parallelism.
 
-- If `task` is available and the task is a complex report, multi-angle investigation, literature review, or wiki-grounded deep research request, use subagents by default. Decompose the work into independent section tasks and delegate them in parallel whenever at least two useful tasks can run independently.
-- If the user explicitly asks for subagents, multi-agent execution, distributed research, or parallel section work and `task` is available, you MUST use `task`; do not silently perform the work as a single agent.
-- If the user explicitly asks for subagents, multi-agent execution, distributed research, or parallel section work and `task` is not available, do not silently continue in single-agent mode. Explain that this run was not started with subagent mode enabled and ask the user to resend in Ultra/subagent mode, or provide an equivalent runtime setting.
-- If `task` is not available and the user did not explicitly require subagents, subagents are not enabled for this run. Continue in single-agent mode, and mention Ultra/subagent mode only when the task would materially benefit from it.
+- If `task` is available, you may use subagents for complex questions, multi-angle investigations, and deep research reports. Decompose the work into independent section tasks when parallel section-level research would improve the result.
+- If `task` is not available, subagents are not enabled for this run. Continue in single-agent mode, and mention Ultra/subagent mode only when the user explicitly expects multi-agent execution or the task would materially benefit from it.
 - Do not treat `wiki_research_context` as a replacement for subagents. It prepares evidence packs; `task` can perform parallel section research when subagent mode is available and useful.
 
 Recommended flow:
