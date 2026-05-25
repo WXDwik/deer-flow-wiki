@@ -102,8 +102,25 @@ const DEEP_RESEARCH_ULTRA_PATTERNS = [
   /parallel\s+research/i,
 ];
 
+const EXPLICIT_SUBAGENT_PATTERNS = [
+  /子\s*agent/i,
+  /子代理/i,
+  /多\s*agent/i,
+  /多代理/i,
+  /多智能体/i,
+  /multi[-\s]?agent/i,
+  /subagent/i,
+  /sub-agent/i,
+  /分发/i,
+  /并行/i,
+];
+
 function shouldSuggestUltraForDeepResearch(text: string): boolean {
   return DEEP_RESEARCH_ULTRA_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function explicitlyRequestsSubagents(text: string): boolean {
+  return EXPLICIT_SUBAGENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function getResolvedMode(
@@ -293,6 +310,19 @@ export function InputBox({
             context.mode,
             selectedModel?.supports_thinking ?? false,
           ),
+        });
+        setTimeout(() => onSubmit?.(message), 0);
+        return;
+      }
+
+      if (
+        context.mode !== "ultra" &&
+        explicitlyRequestsSubagents(message.text)
+      ) {
+        onContextChange?.({
+          ...context,
+          mode: "ultra",
+          reasoning_effort: "high",
         });
         setTimeout(() => onSubmit?.(message), 0);
         return;
