@@ -42,13 +42,14 @@ For complex research reports, the lead agent owns planning and final synthesis. 
 
 ### Subagent Preflight
 
-Before starting a complex problem or deep research report, check whether the `task` tool is available and decide whether subagents would improve coverage, focus, or parallelism.
+Before starting a complex problem or deep research report, check whether the `task` tool is available. For deep research reports, subagent orchestration is mandatory whenever `task` is available.
 
-- If `task` is available and the task is a complex report, multi-angle investigation, literature review, or wiki-grounded deep research request, use subagents by default. Decompose the work into independent section tasks and delegate them in parallel whenever at least two useful tasks can run independently.
-- If the user explicitly asks for subagents, multi-agent execution, distributed research, or parallel section work and `task` is available, you MUST use `task`; do not silently perform the work as a single agent.
-- If the user explicitly asks for subagents, multi-agent execution, distributed research, or parallel section work and `task` is not available, do not silently continue in single-agent mode. Explain that this run was not started with subagent mode enabled and ask the user to resend in Ultra/subagent mode, or provide an equivalent runtime setting.
-- If `task` is not available and the user did not explicitly require subagents, subagents are not enabled for this run. Continue in single-agent mode, and mention Ultra/subagent mode only when the task would materially benefit from it.
-- Do not treat `wiki_research_context` as a replacement for subagents. It prepares evidence packs; `task` can perform parallel section research when subagent mode is available and useful.
+- If `task` is available and the user asks for a deep research report, systematic research report, multi-angle report, literature review, or wiki-grounded deep research report, you MUST use `task`. Decompose the work into independent section or dimension tasks and delegate them in parallel whenever at least two useful tasks can run independently.
+- If `task` is available and the user explicitly asks for subagents, multi-agent execution, distributed research, or parallel section work, you MUST use `task`; do not silently perform the work as a single agent.
+- The lead agent owns topic decomposition, evidence-source planning, focused context-pack preparation, and final synthesis. Subagents own isolated section-level or dimension-level research tasks.
+- If `task` is not available for a deep research report, do not silently continue in single-agent mode. Before starting the report, explain that this run was not started with subagent mode enabled, so the lead-agent-plus-subagent deep research workflow cannot be executed. Ask the user to resend in Ultra/subagent mode or confirm that they want a single-agent report.
+- If `task` is not available and the request is not a deep research report or explicit subagent request, continue in single-agent mode and mention Ultra/subagent mode only when the task would materially benefit from it.
+- Do not treat `wiki_research_context`, web search/fetch, or ordinary tool calls as replacements for subagents. They prepare evidence and context; only `task` performs delegated subagent research.
 
 Recommended flow:
 
@@ -58,7 +59,7 @@ Recommended flow:
 4. **Do initial broad research**: Use web search/fetch and wiki evidence to understand the topic landscape before decomposition.
 5. **Design report structure**: Decide the sections, research questions, and evidence needs for the final report.
 6. **Prepare assigned context packs**: For each section, call `wiki_research_context` with focused queries to build the wiki context pack for that section.
-7. **Delegate in parallel**: Use `task` to send independent section work to subagents. Include the section objective, assigned wiki context pack, relevant web findings, and output expectations in each task prompt.
+7. **Delegate in parallel**: If `task` is available for a deep research report, you MUST use `task` to send independent section work to subagents. Include the section objective, assigned wiki context pack, relevant web findings, and output expectations in each task prompt.
 8. **Synthesize, do not concatenate**: After subagents return, the lead agent resolves overlap, contradictions, gaps, ordering, and tone, then writes the final integrated report.
 
 Subagent prompts should be narrow. Do not ask every subagent to write the full report. Assign each subagent one dimension or section, and pass only the wiki/web context relevant to that task.
@@ -236,5 +237,7 @@ After completing research, you should have:
 3. Real-world examples and case studies
 4. Expert perspectives and authoritative sources
 5. Current trends and relevant context
+
+For deep research reports, synthesize subagent findings into one integrated report rather than concatenating section outputs. If no subagent was called for a deep research report, the final response MUST state why, such as `task` not being available or the run not being started in Ultra/subagent mode.
 
 **Only then proceed to content generation**, using the gathered information to create high-quality, well-informed content.
