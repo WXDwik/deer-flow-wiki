@@ -28,6 +28,7 @@ from deerflow.wiki.paths import (
     synthesis_page_path,
     unique_child_path,
 )
+from deerflow.wiki.purpose import wiki_language_instruction
 from deerflow.wiki.repository import WikiRepository
 
 _MAX_LLM_MARKDOWN_CHARS = 40_000
@@ -214,7 +215,7 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
       "title": "Human-readable page title, preserving original capitalization",
       "source_ids": ["source ids that support this page"],
       "tags": ["short-tag"],
-      "content": "Markdown body. Use wikilinks targeting existing page filename stems, like [[Page-Stem]] or [[Page-Stem|Readable Label]], when useful."
+      "content": "Markdown body. Use wikilinks targeting existing page filename stems, like [[Readable Page Stem]], when useful."
     }}
   ]
 }}
@@ -222,6 +223,8 @@ Read the wiki context and ALL imported source Markdown together. Return ONLY val
 Rules:
 - Treat schema.md in the wiki context as the active contract for directory
   structure, page types, source traceability, and write-back behavior.
+- Follow the target wiki language rules below for every generated source
+  summary and page body. Source language does not override the wiki language.
 - Use source_id values exactly as listed in the manifest.
 - Return one source summary for each imported source.
 - Base every statement on the imported sources.
@@ -237,14 +240,15 @@ Rules:
   and acronyms (for example MIMO, UAD, Transformer, Deep Learning). Do not
   return lowercase slugs as visible titles when a readable title can be
   recovered from the imported source.
-- Wikilinks must target existing page filename stems without .md. Preserve
-  readable filename capitalization when a page stem uses it. Old lowercase links
-  are accepted for compatibility, but newly generated links should use the
-  actual page stem when it is available. Use aliases such as
-  [[Lite-Transformer-for-UAD|Lite Transformer for UAD]] when visible link text
-  should preserve readable capitalization.
+- Wikilinks must target existing page filename stems without .md. New generated
+  page filenames preserve normal spaces from their readable titles, so link to
+  a page titled "Lite Transformer for UAD" as [[Lite Transformer for UAD]].
+  Old lowercase or hyphenated slug links are accepted for compatibility, but
+  newly generated links should use the actual page stem when it is available.
 - Only link to pages that already exist or pages returned in this JSON response.
 - Do not invent facts.
+
+{wiki_language_instruction(paths)}
 
 Wiki context:
 {_wiki_context(paths)}

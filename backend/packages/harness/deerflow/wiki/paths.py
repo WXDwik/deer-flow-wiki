@@ -133,12 +133,11 @@ def display_slugify_name(name: str) -> str:
 
     Unlike ``slugify_name``, this preserves readable capitalization and
     non-path-separator Unicode text for user-facing Markdown page filenames.
-    It still normalizes whitespace to hyphens and removes path-unsafe
-    characters so the result is safe to use as a single filename component.
+    It keeps normal spaces intact and removes path-unsafe characters so the
+    result is safe to use as a single filename component.
     """
     value = name.strip()
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", value)
-    value = re.sub(r"\s+", "-", value)
     value = re.sub(r"-+", "-", value)
     value = value.strip(" .-_")
     if not value:

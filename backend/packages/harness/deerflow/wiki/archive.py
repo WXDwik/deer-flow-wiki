@@ -29,6 +29,7 @@ from deerflow.wiki.paths import (
     query_page_path,
     synthesis_page_path,
 )
+from deerflow.wiki.purpose import update_purpose_after_wiki_change, wiki_language_instruction
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.schema import schema_context
 
@@ -127,6 +128,8 @@ Follow the active schema.md contract below when deciding whether and how to
 write back:
 {schema_context(paths)}
 
+{wiki_language_instruction(paths)}
+
 Return ONLY valid JSON:
 {{
   "should_archive": true,
@@ -219,6 +222,8 @@ methods, datasets, authors, organizations, and acronyms.
 Follow the active schema.md contract below. Return Markdown body only: no YAML
 frontmatter and no duplicate top-level title.
 {schema_context(paths)}
+
+{wiki_language_instruction(paths)}
 
 Return ONLY valid JSON:
 {{
@@ -357,6 +362,8 @@ headings, prose, and labels; do not convert visible terms to lowercase slugs.
 Follow the active schema.md contract below:
 {schema_context(paths)}
 
+{wiki_language_instruction(paths)}
+
 Return ONLY valid JSON:
 {{
   "changes": [
@@ -450,7 +457,9 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
         "entity": "## Entities",
         "source": "## Sources",
     }.get(archived_page.page_type, "## Queries")
-    link = f"- [[{Path(archived_page.path).stem}|{archived_page.title}]]"
+    stem = Path(archived_page.path).stem
+    link_target = stem if stem == archived_page.title else f"{stem}|{archived_page.title}"
+    link = f"- [[{link_target}]]"
     if link in current:
         return
     if section in current:
@@ -460,7 +469,7 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
     paths.wiki_index_file.write_text(current, encoding="utf-8")
 
 
-def append_wiki_log(paths: WikiPaths, summary: str, changed_paths: list[str]) -> None:
+def append_wiki_log(paths: WikiPaths, summary: str, changed_paths: list[str], purpose_update: dict[str, Any] | None = None) -> None:
     """Append an archive operation record to wiki/log.md."""
     now = datetime.now(UTC).isoformat()
     entry = f"\n## [{now}] query-archive\n\n{summary}\n"
@@ -468,6 +477,13 @@ def append_wiki_log(paths: WikiPaths, summary: str, changed_paths: list[str]) ->
         entry += "\nChanged files:\n"
         for path in changed_paths:
             entry += f"- `{path}`\n"
+    if purpose_update is not None:
+        entry += "\nPurpose update:\n"
+        entry += f"- updated: `{bool(purpose_update.get('updated'))}`\n"
+        if purpose_update.get("summary"):
+            entry += f"- summary: {purpose_update['summary']}\n"
+        if purpose_update.get("error"):
+            entry += f"- error: `{purpose_update['error']}`\n"
     paths.wiki_log_file.parent.mkdir(parents=True, exist_ok=True)
     with paths.wiki_log_file.open("a", encoding="utf-8") as f:
         f.write(entry)
@@ -504,7 +520,15 @@ def archive_answer(
             changed_paths.extend(change.path for change in page_changes)
 
         if changed_paths:
-            append_wiki_log(paths, decision.reason or "Archived query answer.", changed_paths)
+            purpose_update = update_purpose_after_wiki_change(
+                paths,
+                change_summary=decision.reason or "Archived query answer.",
+                changed_paths=changed_paths,
+                model_name=model_name,
+            )
+            if purpose_update.get("updated"):
+                changed_paths.append("purpose.md")
+            append_wiki_log(paths, decision.reason or "Archived query answer.", changed_paths, purpose_update)
             archive_applied = True
 
     return QueryAnswer(

@@ -24,7 +24,7 @@ def test_new_wiki_has_versioned_schema_contract(tmp_path: Path) -> None:
     assert "Schema 演化规则" in schema
     assert "语言与显示标题规则" in schema
     assert "frontmatter `title`、页面一级标题、索引显示名和图谱节点标签" in schema
-    assert "[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]" in schema
+    assert "[[Lite Transformer for UAD]]" in schema
     assert "旧的小写 slug 链接仍可被系统解析" in schema
     assert "`wiki/deepresearch/`" in schema
     assert "`deepresearch`" in schema

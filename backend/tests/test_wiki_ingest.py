@@ -4,12 +4,36 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from langchain_core.messages import AIMessage
 
 from deerflow.wiki.ingest import ingest_file, ingest_files
+from deerflow.wiki.lint import lint_wiki
+from deerflow.wiki.paths import display_slugify_name
 from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.scaffold import create_wiki_database
 from deerflow.wiki.service import add_source, add_sources, source_status, sync_pending_sources
+
+
+@pytest.fixture(autouse=True)
+def _skip_purpose_updates_by_default(monkeypatch) -> None:
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "should_update": False,
+                "purpose_markdown": "",
+                "summary": "No purpose-level change.",
+            }
+        )
+    )
+    monkeypatch.setattr("deerflow.wiki.purpose.create_chat_model", lambda *args, **kwargs: model)
+
+
+def test_display_slugify_name_preserves_readable_spaces_and_cleans_path_chars() -> None:
+    assert display_slugify_name("Cell-Free Massive MIMO") == "Cell-Free Massive MIMO"
+    assert display_slugify_name("CF-RAN协议栈与接口设计") == "CF-RAN协议栈与接口设计"
+    assert display_slugify_name("CF/RAN*Design.") == "CF-RAN-Design"
 
 
 def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path: Path) -> None:
@@ -62,11 +86,11 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     assert "schema_version: 1" in prompt
     assert "display_title" in prompt
     assert "reader-facing labels" in prompt
-    assert "[[Lite-Transformer-for-UAD|Lite Transformer for UAD]]" in prompt
     assert "[[Lite Transformer for UAD]]" in prompt
+    assert "hyphenated slug links are accepted for compatibility" in prompt
 
     source_summary = paths.wiki_sources_dir / "paper.md"
-    concept_page = paths.wiki_concepts_dir / "Retrieval-Augmented-Generation.md"
+    concept_page = paths.wiki_concepts_dir / "Retrieval Augmented Generation.md"
     assert "This source summarizes RAG." in source_summary.read_text(encoding="utf-8")
     assert "RAG combines retrieval" in concept_page.read_text(encoding="utf-8")
 
@@ -101,12 +125,51 @@ def test_ingest_source_summary_uses_readable_display_title_from_model(tmp_path: 
     with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
         source = ingest_file(paths, source_file)
 
-    source_page = paths.wiki_sources_dir / "Deep-Learning-Based-Activity-Detection-for-UAD.md"
+    source_page = paths.wiki_sources_dir / "Deep Learning-Based Activity Detection for UAD.md"
     text = source_page.read_text(encoding="utf-8")
     assert '# Deep Learning-Based Activity Detection for UAD' in text
     assert 'title: "Deep Learning-Based Activity Detection for UAD"' in text
     assert "中文说明保留 `UAD` 和 `MIMO`" in text
     assert source.metadata["generated_pages"][0]["title"] == "Deep Learning-Based Activity Detection for UAD"
+
+
+def test_ingest_file_preserves_space_filename_wikilinks_for_lint(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "cell-free-notes.md"
+    source_file.write_text("# Cell-Free Notes\n\nCell-Free Massive MIMO is central.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "source_summary": "Notes summary.",
+                "tags": ["cell-free"],
+                "pages": [
+                    {
+                        "type": "entity",
+                        "title": "Cell-Free Massive MIMO",
+                        "tags": ["mimo"],
+                        "content": "A distributed massive MIMO architecture.",
+                    },
+                    {
+                        "type": "concept",
+                        "title": "CF-mMIMO Random Access",
+                        "tags": ["random-access"],
+                        "content": "Random access builds on [[Cell-Free Massive MIMO]].",
+                    },
+                ],
+            }
+        )
+    )
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        ingest_file(paths, source_file)
+
+    entity_page = paths.wiki_entities_dir / "Cell-Free Massive MIMO.md"
+    concept_page = paths.wiki_concepts_dir / "CF-mMIMO Random Access.md"
+    assert entity_page.is_file()
+    assert "[[Cell-Free Massive MIMO]]" in concept_page.read_text(encoding="utf-8")
+    assert [issue for issue in lint_wiki(paths) if issue.type == "broken-link"] == []
 
 
 def test_ingest_file_falls_back_when_model_output_is_invalid(tmp_path: Path) -> None:
@@ -160,12 +223,12 @@ def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None
     assert model.invoke.call_count == 1
     assert {source.metadata["ingest_mode"] for source in sources} == {"llm_batch"}
 
-    comparison = paths.wiki_comparisons_dir / "Method-Comparison.md"
+    comparison = paths.wiki_comparisons_dir / "Method Comparison.md"
     assert comparison.is_file()
     assert "Method A and Method B" in comparison.read_text(encoding="utf-8")
 
     index = WikiRepository(paths).read_index()
-    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/comparisons/Method-Comparison.md"]
+    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/comparisons/Method Comparison.md"]
     assert len(comparison_pages) == 1
     assert len(comparison_pages[0]["sources"]) == 2
 
@@ -182,6 +245,162 @@ def test_ingest_files_passes_model_name_to_chat_factory(tmp_path: Path) -> None:
         ingest_files(paths, [source_file], model_name="deepseek-v4-pro")
 
     factory.assert_called_once_with(name="deepseek-v4-pro", thinking_enabled=False)
+
+
+def test_ingest_prompt_uses_configured_zh_language_for_english_source(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki", language="zh-CN")
+    source_file = tmp_path / "english-paper.md"
+    source_file.write_text("# English Paper\n\nThis paper studies retrieval augmented generation.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "source_summary": "这篇论文讨论检索增强生成。",
+                "tags": ["rag"],
+                "pages": [
+                    {
+                        "type": "concept",
+                        "title": "Retrieval Augmented Generation",
+                        "tags": ["rag"],
+                        "content": "检索增强生成结合检索与生成能力。",
+                    }
+                ],
+            }
+        )
+    )
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        ingest_file(paths, source_file)
+
+    prompt = model.invoke.call_args.args[0]
+    assert "Target wiki language: `zh-CN`" in prompt
+    assert "use Chinese explanatory prose even when imported sources are English" in prompt
+    assert "Source language does not override the wiki language" in prompt
+    assert "这篇论文讨论检索增强生成" in (paths.wiki_sources_dir / "english-paper.md").read_text(encoding="utf-8")
+    assert "检索增强生成结合检索与生成能力" in (
+        paths.wiki_concepts_dir / "Retrieval Augmented Generation.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_ingest_prompt_uses_configured_en_language(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki", language="en")
+    source_file = tmp_path / "paper.md"
+    source_file.write_text("# Paper\n\nMethod content.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=json.dumps({"source_summary": "Summary.", "tags": [], "pages": []}))
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        ingest_file(paths, source_file)
+
+    prompt = model.invoke.call_args.args[0]
+    assert "Target wiki language: `en`" in prompt
+    assert "Write explanatory prose, source summaries, generated page content" in prompt
+    assert "Target wiki language: `zh-CN`" not in prompt
+
+
+def test_add_source_updates_purpose_when_model_requests_it(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "notes.md"
+    source_file.write_text("# Notes\n\nRAG is now the central research topic.", encoding="utf-8")
+
+    ingest_model = MagicMock()
+    ingest_model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "source_summary": "RAG 是新的研究重点。",
+                "tags": ["rag"],
+                "pages": [
+                    {
+                        "type": "concept",
+                        "title": "Retrieval Augmented Generation",
+                        "tags": ["rag"],
+                        "content": "RAG 是当前知识库的核心主题。",
+                    }
+                ],
+            }
+        )
+    )
+    purpose_model = MagicMock()
+    purpose_model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "should_update": True,
+                "purpose_markdown": "# Research Wiki 研究目标\n\n## 目标\n\n聚焦 RAG 研究。\n",
+                "summary": "Updated purpose for RAG focus.",
+            }
+        )
+    )
+
+    with (
+        patch("deerflow.wiki.ingest.create_chat_model", return_value=ingest_model),
+        patch("deerflow.wiki.purpose.create_chat_model", return_value=purpose_model),
+    ):
+        result = add_source(str(paths.root), source_file)
+
+    assert result["metadata"]["purpose_update"]["updated"] is True
+    assert result["metadata"]["purpose_update"]["summary"] == "Updated purpose for RAG focus."
+    assert "聚焦 RAG 研究" in paths.purpose_file.read_text(encoding="utf-8")
+    log = paths.wiki_log_file.read_text(encoding="utf-8")
+    assert "Purpose update:" in log
+    assert "Changed files:" in log
+    assert "`purpose.md`" in log
+
+
+def test_add_source_keeps_purpose_when_update_not_needed(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    original = paths.purpose_file.read_text(encoding="utf-8")
+    source_file = tmp_path / "notes.md"
+    source_file.write_text("# Notes\n\nSmall supporting note.", encoding="utf-8")
+
+    ingest_model = MagicMock()
+    ingest_model.invoke.return_value = AIMessage(content=json.dumps({"source_summary": "补充说明。", "tags": [], "pages": []}))
+    purpose_model = MagicMock()
+    purpose_model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "should_update": False,
+                "purpose_markdown": "",
+                "summary": "No purpose-level change.",
+            }
+        )
+    )
+
+    with (
+        patch("deerflow.wiki.ingest.create_chat_model", return_value=ingest_model),
+        patch("deerflow.wiki.purpose.create_chat_model", return_value=purpose_model),
+    ):
+        result = add_source(str(paths.root), source_file)
+
+    assert result["metadata"]["purpose_update"]["updated"] is False
+    assert result["metadata"]["purpose_update"]["summary"] == "No purpose-level change."
+    assert paths.purpose_file.read_text(encoding="utf-8") == original
+    assert "No purpose-level change." in paths.wiki_log_file.read_text(encoding="utf-8")
+
+
+def test_add_source_survives_invalid_purpose_update_response(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    original = paths.purpose_file.read_text(encoding="utf-8")
+    source_file = tmp_path / "notes.md"
+    source_file.write_text("# Notes\n\nImportant local content.", encoding="utf-8")
+
+    ingest_model = MagicMock()
+    ingest_model.invoke.return_value = AIMessage(content=json.dumps({"source_summary": "Notes summary.", "tags": [], "pages": []}))
+    purpose_model = MagicMock()
+    purpose_model.invoke.return_value = AIMessage(content="not json")
+
+    with (
+        patch("deerflow.wiki.ingest.create_chat_model", return_value=ingest_model),
+        patch("deerflow.wiki.purpose.create_chat_model", return_value=purpose_model),
+    ):
+        result = add_source(str(paths.root), source_file)
+
+    assert result["metadata"]["purpose_update"]["updated"] is False
+    assert "error" in result["metadata"]["purpose_update"]
+    assert paths.purpose_file.read_text(encoding="utf-8") == original
+    assert (paths.wiki_sources_dir / "notes.md").is_file()
+    assert len(WikiRepository(paths).read_index()["sources"]) == 1
 
 
 def test_add_source_returns_light_lint_result(tmp_path: Path) -> None:
@@ -387,7 +606,7 @@ def test_sync_pending_sources_batches_unique_pending_files(tmp_path: Path) -> No
     assert result["processed_count"] == 2
     assert result["failed_count"] == 0
     assert model.invoke.call_count == 1
-    assert (paths.wiki_comparisons_dir / "Pending-Source-Comparison.md").is_file()
+    assert (paths.wiki_comparisons_dir / "Pending Source Comparison.md").is_file()
 
 
 def test_sync_pending_sources_imports_only_unparsed_raw_files(tmp_path: Path) -> None:

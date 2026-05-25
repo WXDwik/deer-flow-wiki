@@ -170,6 +170,25 @@ def wiki_create_tool(
     return _json_result({"ok": True, "wiki": result})
 
 
+@tool("wiki_delete", parse_docstring=True)
+def wiki_delete_tool(
+    runtime: ToolRuntime[ContextT, ThreadState],
+    wiki_name_or_path: str,
+) -> str:
+    """Delete an existing local LLM Wiki database and all of its contents.
+
+    Use this tool only after the user explicitly confirms deletion. This is
+    irreversible. The target must be a complete LLM Wiki layout, not an
+    arbitrary directory.
+
+    Args:
+        wiki_name_or_path: Existing wiki name or filesystem path. A plain name is resolved under the current user's shared wiki directory.
+    """
+    resolved_wiki = _resolve_wiki_name_or_path(runtime, wiki_name_or_path)
+    result = service.delete_wiki(resolved_wiki)
+    return _json_result({"ok": True, **result})
+
+
 @tool("wiki_add_source", parse_docstring=True)
 def wiki_add_source_tool(
     runtime: ToolRuntime[ContextT, ThreadState],
@@ -433,6 +452,7 @@ def wiki_evolve_schema_tool(
 
 WIKI_TOOLS = [
     wiki_create_tool,
+    wiki_delete_tool,
     wiki_add_source_tool,
     wiki_search_tool,
     wiki_research_context_tool,

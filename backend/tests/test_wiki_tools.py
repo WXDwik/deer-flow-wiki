@@ -140,11 +140,32 @@ def test_wiki_lint_keeps_existing_wiki_behavior(tmp_path: Path) -> None:
     assert isinstance(result, list)
 
 
+def test_delete_wiki_removes_complete_wiki_directory(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    (paths.raw_sources_dir / "source.md").write_text("# Source", encoding="utf-8")
+
+    result = service.delete_wiki(str(paths.root))
+
+    assert result == {"root": str(paths.root), "deleted": True}
+    assert not paths.root.exists()
+
+
+def test_delete_wiki_rejects_incomplete_directory(tmp_path: Path) -> None:
+    incomplete = tmp_path / "not-a-complete-wiki"
+    (incomplete / "wiki").mkdir(parents=True)
+
+    with pytest.raises(FileNotFoundError, match="Wiki not found or incomplete"):
+        service.delete_wiki(str(incomplete))
+
+    assert incomplete.exists()
+
+
 def test_wiki_tools_include_source_status_tool() -> None:
     tool_names = {tool.name for tool in WIKI_TOOLS}
 
     assert "wiki_source_status" in tool_names
     assert "wiki_sync_sources" in tool_names
+    assert "wiki_delete" in tool_names
     assert "wiki_add_source" in tool_names
     assert "wiki_add_sources" not in tool_names
     assert "wiki_plan_report" not in tool_names

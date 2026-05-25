@@ -6,6 +6,7 @@ tools 层后续应该只调用这里，不要直接操作 paths/repository/inges
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from deerflow.wiki.ingest import ingest_files, sha256_file
 from deerflow.wiki.lint import lint_wiki
 from deerflow.wiki.models import RawSource
 from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root, wiki_layout_exists
+from deerflow.wiki.purpose import update_purpose_after_wiki_change
 from deerflow.wiki.query import search_wiki
 from deerflow.wiki.repair import repair_lint
 from deerflow.wiki.report import research_context as build_research_context
@@ -42,6 +44,20 @@ def open_wiki(wiki_name_or_path: str) -> WikiPaths:
     return build_wiki_paths(root)
 
 
+def delete_wiki(wiki_name_or_path: str) -> dict:
+    """Delete a complete LLM Wiki directory and all of its contents."""
+    paths = open_wiki(wiki_name_or_path)
+    if paths.root.is_symlink():
+        raise ValueError(f"Refusing to delete symlinked wiki root: {paths.root}")
+
+    root = paths.root
+    shutil.rmtree(root)
+    return {
+        "root": str(root),
+        "deleted": True,
+    }
+
+
 def add_source(wiki_name_or_path: str, source_file: str | Path, *, model_name: str | None = None) -> dict:
     """向 wiki 导入一个原始资料文件。"""
     result = add_sources(wiki_name_or_path, [source_file], model_name=model_name)
@@ -58,7 +74,7 @@ def _post_ingest_lint(paths: WikiPaths, *, trigger: str, model_name: str | None 
     }
 
 
-def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: dict) -> None:
+def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: dict, purpose_update: dict | None = None) -> None:
     now = datetime.now(UTC).isoformat()
     source_word = "source" if len(sources) == 1 else "sources"
     entry = f"\n## [{now}] source-ingest\n\nImported {len(sources)} {source_word}.\n\nSources:\n"
@@ -100,6 +116,16 @@ def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: 
         f"- issues: `{lint_result.get('issue_count', 0)}`\n"
     )
 
+    if purpose_update is not None:
+        entry += "\nPurpose update:\n"
+        entry += f"- updated: `{bool(purpose_update.get('updated'))}`\n"
+        if purpose_update.get("summary"):
+            entry += f"- summary: {purpose_update['summary']}\n"
+        if purpose_update.get("error"):
+            entry += f"- error: `{purpose_update['error']}`\n"
+        if purpose_update.get("updated"):
+            entry += "\nChanged files:\n- `purpose.md`\n"
+
     paths.wiki_log_file.parent.mkdir(parents=True, exist_ok=True)
     with paths.wiki_log_file.open("a", encoding="utf-8") as f:
         f.write(entry)
@@ -118,7 +144,25 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
     for source in sources:
         source.metadata["lint"] = lint_result
         repo.add_source(source)
-    _append_ingest_log(paths, sources, lint_result)
+
+    changed_paths = sorted(
+        {
+            str(page.get("path"))
+            for source in sources
+            for page in source.metadata.get("generated_pages", [])
+            if isinstance(page, dict) and page.get("path")
+        }
+    )
+    purpose_update = update_purpose_after_wiki_change(
+        paths,
+        change_summary=f"Imported {len(sources)} source{'s' if len(sources) != 1 else ''}.",
+        changed_paths=changed_paths,
+        model_name=model_name,
+    )
+    for source in sources:
+        source.metadata["purpose_update"] = purpose_update
+        repo.add_source(source)
+    _append_ingest_log(paths, sources, lint_result, purpose_update)
 
     return {
         "root": str(paths.root),
@@ -127,6 +171,7 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
         "metadata": {
             "ingest_mode": "batch" if len(sources) > 1 else "single",
             "lint": lint_result,
+            "purpose_update": purpose_update,
         },
     }
 
