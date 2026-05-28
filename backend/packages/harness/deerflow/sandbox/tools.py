@@ -9,7 +9,7 @@ from langchain.tools import tool
 
 from deerflow.agents.thread_state import ThreadDataState
 from deerflow.config import get_app_config
-from deerflow.config.paths import VIRTUAL_PATH_PREFIX
+from deerflow.config.paths import VIRTUAL_PATH_PREFIX, VIRTUAL_USER_WIKI_PREFIX
 from deerflow.sandbox.exceptions import (
     SandboxError,
     SandboxNotFoundError,
@@ -159,6 +159,11 @@ def _resolve_skills_path(path: str) -> str:
 def _is_acp_workspace_path(path: str) -> bool:
     """Check if a path is under the ACP workspace virtual path."""
     return path == _ACP_WORKSPACE_VIRTUAL_PATH or path.startswith(f"{_ACP_WORKSPACE_VIRTUAL_PATH}/")
+
+
+def _is_user_wiki_path(path: str) -> bool:
+    """Check if a path is under the shared user wiki virtual path."""
+    return path == VIRTUAL_USER_WIKI_PREFIX or path.startswith(f"{VIRTUAL_USER_WIKI_PREFIX}/")
 
 
 def _get_custom_mounts():
@@ -313,6 +318,33 @@ def _resolve_acp_workspace_path(path: str, thread_id: str | None = None) -> str:
     return str(resolved_path)
 
 
+def _get_user_wiki_host_path() -> str:
+    """Get the current user's shared wiki host filesystem path."""
+    from deerflow.config.paths import get_paths
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    paths = get_paths()
+    return str(paths.ensure_user_wiki_dir(get_effective_user_id()))
+
+
+def _resolve_user_wiki_path(path: str) -> str:
+    """Resolve a virtual user-wiki path to the current user's host wiki path."""
+    _reject_path_traversal(path)
+
+    host_path = _get_user_wiki_host_path()
+    if path == VIRTUAL_USER_WIKI_PREFIX:
+        return host_path
+
+    relative = path[len(VIRTUAL_USER_WIKI_PREFIX) :].lstrip("/")
+    resolved = Path(_join_path_preserving_style(host_path, relative)).resolve()
+    base = Path(host_path).resolve()
+    try:
+        resolved.relative_to(base)
+    except ValueError:
+        raise PermissionError("Access denied: path traversal detected") from None
+    return str(resolved)
+
+
 def _get_mcp_allowed_paths() -> list[str]:
     """Get the list of allowed paths from MCP config for file system server."""
     allowed_paths = []
@@ -376,6 +408,8 @@ def _resolve_local_read_path(path: str, thread_data: ThreadDataState) -> str:
         return _resolve_skills_path(path)
     if _is_acp_workspace_path(path):
         return _resolve_acp_workspace_path(path, _extract_thread_id_from_thread_data(thread_data))
+    if _is_user_wiki_path(path):
+        return _resolve_user_wiki_path(path)
     return _resolve_and_validate_user_data_path(path, thread_data)
 
 
@@ -583,6 +617,27 @@ def mask_local_paths_in_output(output: str, thread_data: ThreadDataState | None)
 
             result = pattern.sub(replace_acp, result)
 
+    # Mask shared user wiki host paths
+    try:
+        user_wiki_host = _get_user_wiki_host_path()
+    except Exception:
+        user_wiki_host = None
+    if user_wiki_host:
+        raw_base = str(Path(user_wiki_host))
+        resolved_base = str(Path(user_wiki_host).resolve())
+        for base in _path_variants(raw_base) | _path_variants(resolved_base):
+            escaped = re.escape(base).replace(r"\\", r"[/\\]")
+            pattern = re.compile(escaped + r"(?:[/\\][^\s\"';&|<>()]*)?")
+
+            def replace_user_wiki(match: re.Match, _base: str = base) -> str:
+                matched_path = match.group(0)
+                if matched_path == _base:
+                    return VIRTUAL_USER_WIKI_PREFIX
+                relative = matched_path[len(_base) :].lstrip("/\\")
+                return f"{VIRTUAL_USER_WIKI_PREFIX}/{relative}" if relative else VIRTUAL_USER_WIKI_PREFIX
+
+            result = pattern.sub(replace_user_wiki, result)
+
     # Custom mount host paths are masked by LocalSandbox._reverse_resolve_paths_in_output()
 
     # Mask user-data host paths
@@ -665,6 +720,10 @@ def validate_local_tool_path(path: str, thread_data: ThreadDataState | None, *, 
     if path.startswith(f"{VIRTUAL_PATH_PREFIX}/"):
         return
 
+    # Shared user wiki paths
+    if _is_user_wiki_path(path):
+        return
+
     # Custom mount paths — respect read_only config
     if _is_custom_mount_path(path):
         mount = _get_custom_mount_for_path(path)
@@ -672,7 +731,7 @@ def validate_local_tool_path(path: str, thread_data: ThreadDataState | None, *, 
             raise PermissionError(f"Write access to read-only mount is not allowed: {path}")
         return
 
-    raise PermissionError(f"Only paths under {VIRTUAL_PATH_PREFIX}/, {_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, or configured mount paths are allowed")
+    raise PermissionError(f"Only paths under {VIRTUAL_PATH_PREFIX}/, {VIRTUAL_USER_WIKI_PREFIX}/, {_get_skills_container_path()}/, {_ACP_WORKSPACE_VIRTUAL_PATH}/, or configured mount paths are allowed")
 
 
 def _validate_resolved_user_data_path(resolved: Path, thread_data: ThreadDataState) -> None:
@@ -790,6 +849,11 @@ def _is_allowed_local_bash_absolute_path(path: str, allowed_paths: list[str], *,
 
     # Allow ACP workspace path (path-traversal check only)
     if _is_acp_workspace_path(path):
+        _reject_path_traversal(path)
+        return True
+
+    # Allow shared user wiki path (path-traversal check only)
+    if _is_user_wiki_path(path):
         _reject_path_traversal(path)
         return True
 
@@ -970,7 +1034,7 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
 
 
 def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState | None) -> str:
-    """Replace all virtual paths (/mnt/user-data, /mnt/skills, /mnt/acp-workspace) in a command string.
+    """Replace all virtual paths (/mnt/user-data, /mnt/user-wiki, /mnt/skills, /mnt/acp-workspace) in a command string.
 
     Args:
         command: The command string that may contain virtual paths.
@@ -1002,6 +1066,15 @@ def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState 
             return _resolve_acp_workspace_path(match.group(0), _tid)
 
         result = acp_pattern.sub(replace_acp_match, result)
+
+    # Replace shared user wiki paths
+    if VIRTUAL_USER_WIKI_PREFIX in result:
+        user_wiki_pattern = re.compile(rf"{re.escape(VIRTUAL_USER_WIKI_PREFIX)}(/[^\s\"';&|<>()]*)?")
+
+        def replace_user_wiki_match(match: re.Match) -> str:
+            return _resolve_user_wiki_path(match.group(0))
+
+        result = user_wiki_pattern.sub(replace_user_wiki_match, result)
 
     # Custom mount paths are resolved by LocalSandbox._resolve_paths_in_command()
 
@@ -1401,6 +1474,8 @@ def ls_tool(runtime: Runtime, description: str, path: str) -> str:
                 path = _resolve_skills_path(path)
             elif _is_acp_workspace_path(path):
                 path = _resolve_acp_workspace_path(path, _extract_thread_id_from_thread_data(thread_data))
+            elif _is_user_wiki_path(path):
+                path = _resolve_user_wiki_path(path)
             elif not _is_custom_mount_path(path):
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
@@ -1630,6 +1705,8 @@ def read_file_tool(
                 path = _resolve_skills_path(path)
             elif _is_acp_workspace_path(path):
                 path = _resolve_acp_workspace_path(path, _extract_thread_id_from_thread_data(thread_data))
+            elif _is_user_wiki_path(path):
+                path = _resolve_user_wiki_path(path)
             elif not _is_custom_mount_path(path):
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
@@ -1694,7 +1771,9 @@ def write_file_tool(
         if is_local_sandbox(runtime):
             thread_data = get_thread_data(runtime)
             validate_local_tool_path(path, thread_data)
-            if not _is_custom_mount_path(path):
+            if _is_user_wiki_path(path):
+                path = _resolve_user_wiki_path(path)
+            elif not _is_custom_mount_path(path):
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):
@@ -1757,7 +1836,9 @@ def str_replace_tool(
         if is_local_sandbox(runtime):
             thread_data = get_thread_data(runtime)
             validate_local_tool_path(path, thread_data)
-            if not _is_custom_mount_path(path):
+            if _is_user_wiki_path(path):
+                path = _resolve_user_wiki_path(path)
+            elif not _is_custom_mount_path(path):
                 path = _resolve_and_validate_user_data_path(path, thread_data)
             # Custom mount paths are resolved by LocalSandbox._resolve_path()
         with get_file_operation_lock(sandbox, path):

@@ -14,8 +14,10 @@ from deerflow.sandbox.tools import (
     _is_acp_workspace_path,
     _is_custom_mount_path,
     _is_skills_path,
+    _is_user_wiki_path,
     _reject_path_traversal,
     _resolve_acp_workspace_path,
+    _resolve_user_wiki_path,
     _resolve_and_validate_user_data_path,
     _resolve_skills_path,
     bash_tool,
@@ -90,6 +92,26 @@ def test_replace_virtual_paths_in_command_preserves_trailing_slash() -> None:
     assert "/tmp/deer-flow/threads/t1/user-data/workspace/" in result, f"Trailing slash lost in: {result!r}"
 
 
+def test_user_wiki_path_helpers() -> None:
+    assert _is_user_wiki_path("/mnt/user-wiki")
+    assert _is_user_wiki_path("/mnt/user-wiki/demo/wiki/index.md")
+    assert not _is_user_wiki_path("/mnt/user-wiki-other")
+
+
+def test_resolve_user_wiki_path_rejects_traversal() -> None:
+    with patch("deerflow.sandbox.tools._get_user_wiki_host_path", return_value="/tmp/deer-flow/users/alice/wiki"):
+        with pytest.raises(PermissionError, match="path traversal"):
+            _resolve_user_wiki_path("/mnt/user-wiki/../../etc/passwd")
+
+
+def test_replace_virtual_paths_in_command_replaces_user_wiki() -> None:
+    with patch("deerflow.sandbox.tools._get_user_wiki_host_path", return_value="/tmp/deer-flow/users/alice/wiki"):
+        result = replace_virtual_paths_in_command("cat /mnt/user-wiki/demo/wiki/index.md", _THREAD_DATA)
+
+    assert "/mnt/user-wiki" not in result
+    assert str(Path("/tmp/deer-flow/users/alice/wiki/demo/wiki/index.md").resolve()) in result
+
+
 # ---------- mask_local_paths_in_output ----------
 
 
@@ -99,6 +121,15 @@ def test_mask_local_paths_in_output_hides_host_paths() -> None:
 
     assert "/tmp/deer-flow/threads/t1/user-data" not in masked
     assert "/mnt/user-data/workspace/result.txt" in masked
+
+
+def test_mask_local_paths_in_output_hides_user_wiki_host_paths() -> None:
+    with patch("deerflow.sandbox.tools._get_user_wiki_host_path", return_value="/tmp/deer-flow/users/alice/wiki"):
+        output = "Updated: /tmp/deer-flow/users/alice/wiki/demo/wiki/index.md"
+        masked = mask_local_paths_in_output(output, _THREAD_DATA)
+
+    assert "/tmp/deer-flow/users/alice/wiki" not in masked
+    assert "/mnt/user-wiki/demo/wiki/index.md" in masked
 
 
 def test_mask_local_paths_in_output_hides_skills_host_paths() -> None:
@@ -829,6 +860,11 @@ def test_validate_local_tool_path_allows_writable_mount_write() -> None:
         validate_local_tool_path("/mnt/data/file.txt", _THREAD_DATA, read_only=False)
 
 
+def test_validate_local_tool_path_allows_user_wiki_read_and_write() -> None:
+    validate_local_tool_path("/mnt/user-wiki/demo/wiki/index.md", _THREAD_DATA, read_only=True)
+    validate_local_tool_path("/mnt/user-wiki/demo/wiki/index.md", _THREAD_DATA, read_only=False)
+
+
 def test_validate_local_tool_path_blocks_traversal_in_custom_mount() -> None:
     """Path traversal via .. in custom mount paths must be rejected."""
     with patch("deerflow.sandbox.tools._get_custom_mounts", return_value=_mock_custom_mounts()):
@@ -841,6 +877,10 @@ def test_validate_local_bash_command_paths_allows_custom_mount() -> None:
     with patch("deerflow.sandbox.tools._get_custom_mounts", return_value=_mock_custom_mounts()):
         validate_local_bash_command_paths("cat /mnt/code-read/src/main.py", _THREAD_DATA)
         validate_local_bash_command_paths("ls /mnt/data", _THREAD_DATA)
+
+
+def test_validate_local_bash_command_paths_allows_user_wiki() -> None:
+    validate_local_bash_command_paths("cat /mnt/user-wiki/demo/wiki/index.md", _THREAD_DATA)
 
 
 def test_validate_local_bash_command_paths_blocks_traversal_in_custom_mount() -> None:

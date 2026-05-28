@@ -28,7 +28,7 @@ except ImportError:  # pragma: no cover - Windows fallback
     import msvcrt
 
 from deerflow.config import get_app_config
-from deerflow.config.paths import VIRTUAL_PATH_PREFIX, get_paths
+from deerflow.config.paths import VIRTUAL_PATH_PREFIX, VIRTUAL_USER_WIKI_PREFIX, get_paths
 from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.sandbox.sandbox import Sandbox
 from deerflow.sandbox.sandbox_provider import SandboxProvider
@@ -311,12 +311,15 @@ class AioSandboxProvider(SandboxProvider):
         """
         paths = get_paths()
         user_id = get_effective_user_id()
+        wiki_user_id = user_id or "default"
         paths.ensure_thread_dirs(thread_id, user_id=user_id)
+        paths.ensure_user_wiki_dir(wiki_user_id)
 
         return [
             (paths.host_sandbox_work_dir(thread_id, user_id=user_id), f"{VIRTUAL_PATH_PREFIX}/workspace", False),
             (paths.host_sandbox_uploads_dir(thread_id, user_id=user_id), f"{VIRTUAL_PATH_PREFIX}/uploads", False),
             (paths.host_sandbox_outputs_dir(thread_id, user_id=user_id), f"{VIRTUAL_PATH_PREFIX}/outputs", False),
+            (paths.host_user_wiki_dir(wiki_user_id), VIRTUAL_USER_WIKI_PREFIX, False),
             # ACP workspace: read-only inside the sandbox (lead agent reads results;
             # the ACP subprocess writes from the host side, not from within the container).
             (paths.host_acp_workspace_dir(thread_id, user_id=user_id), "/mnt/acp-workspace", True),

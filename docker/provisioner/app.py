@@ -60,6 +60,7 @@ SANDBOX_IMAGE = os.environ.get(
 )
 SKILLS_HOST_PATH = os.environ.get("SKILLS_HOST_PATH", "/skills")
 THREADS_HOST_PATH = os.environ.get("THREADS_HOST_PATH", "/.deer-flow/threads")
+USER_WIKI_HOST_PATH = os.environ.get("USER_WIKI_HOST_PATH", "")
 SKILLS_PVC_NAME = os.environ.get("SKILLS_PVC_NAME", "")
 USERDATA_PVC_NAME = os.environ.get("USERDATA_PVC_NAME", "")
 SAFE_THREAD_ID_PATTERN = r"^[A-Za-z0-9_\-]+$"
@@ -95,6 +96,26 @@ def join_host_path(base: str, *parts: str) -> str:
     for part in parts:
         result /= part
     return str(result)
+
+
+if not USER_WIKI_HOST_PATH:
+    USER_WIKI_HOST_PATH = join_host_path(os.path.dirname(THREADS_HOST_PATH.rstrip("/\\")), "users")
+
+
+def _validate_thread_id(thread_id: str) -> str:
+    if not re.match(SAFE_THREAD_ID_PATTERN, thread_id):
+        raise ValueError(
+            "Invalid thread_id: only alphanumeric characters, hyphens, and underscores are allowed."
+        )
+    return thread_id
+
+
+def _validate_user_id(user_id: str) -> str:
+    if not re.match(SAFE_USER_ID_PATTERN, user_id):
+        raise ValueError(
+            "Invalid user_id: only alphanumeric characters, hyphens, and underscores are allowed."
+        )
+    return user_id
 
 
 # ── K8s client setup ────────────────────────────────────────────────────
@@ -240,7 +261,7 @@ def _sandbox_url(node_port: int) -> str:
     return f"http://{NODE_HOST}:{node_port}"
 
 
-def _build_volumes(thread_id: str) -> list[k8s_client.V1Volume]:
+def _build_volumes(thread_id: str, user_id: str = "default") -> list[k8s_client.V1Volume]:
     """Build volume list: PVC when configured, otherwise hostPath."""
     if SKILLS_PVC_NAME:
         skills_vol = k8s_client.V1Volume(
@@ -266,6 +287,12 @@ def _build_volumes(thread_id: str) -> list[k8s_client.V1Volume]:
                 claim_name=USERDATA_PVC_NAME,
             ),
         )
+        user_wiki_vol = k8s_client.V1Volume(
+            name="user-wiki",
+            persistent_volume_claim=k8s_client.V1PersistentVolumeClaimVolumeSource(
+                claim_name=USERDATA_PVC_NAME,
+            ),
+        )
     else:
         userdata_vol = k8s_client.V1Volume(
             name="user-data",
@@ -274,8 +301,15 @@ def _build_volumes(thread_id: str) -> list[k8s_client.V1Volume]:
                 type="DirectoryOrCreate",
             ),
         )
+        user_wiki_vol = k8s_client.V1Volume(
+            name="user-wiki",
+            host_path=k8s_client.V1HostPathVolumeSource(
+                path=join_host_path(USER_WIKI_HOST_PATH, user_id, "wiki"),
+                type="DirectoryOrCreate",
+            ),
+        )
 
-    return [skills_vol, userdata_vol]
+    return [skills_vol, userdata_vol, user_wiki_vol]
 
 
 def _build_volume_mounts(thread_id: str, user_id: str = DEFAULT_USER_ID) -> list[k8s_client.V1VolumeMount]:
@@ -287,6 +321,13 @@ def _build_volume_mounts(thread_id: str, user_id: str = DEFAULT_USER_ID) -> list
     )
     if USERDATA_PVC_NAME:
         userdata_mount.sub_path = f"deer-flow/users/{user_id}/threads/{thread_id}/user-data"
+    user_wiki_mount = k8s_client.V1VolumeMount(
+        name="user-wiki",
+        mount_path="/mnt/user-wiki",
+        read_only=False,
+    )
+    if USERDATA_PVC_NAME:
+        user_wiki_mount.sub_path = f"users/{user_id}/wiki"
 
     return [
         k8s_client.V1VolumeMount(
@@ -295,11 +336,14 @@ def _build_volume_mounts(thread_id: str, user_id: str = DEFAULT_USER_ID) -> list
             read_only=True,
         ),
         userdata_mount,
+        user_wiki_mount,
     ]
 
 
 def _build_pod(sandbox_id: str, thread_id: str, user_id: str = DEFAULT_USER_ID) -> k8s_client.V1Pod:
     """Construct a Pod manifest for a single sandbox."""
+    thread_id = _validate_thread_id(thread_id)
+    user_id = _validate_user_id(user_id)
     return k8s_client.V1Pod(
         metadata=k8s_client.V1ObjectMeta(
             name=_pod_name(sandbox_id),
@@ -363,7 +407,7 @@ def _build_pod(sandbox_id: str, thread_id: str, user_id: str = DEFAULT_USER_ID) 
                     ),
                 )
             ],
-            volumes=_build_volumes(thread_id),
+            volumes=_build_volumes(thread_id, user_id),
             restart_policy="Always",
         ),
     )

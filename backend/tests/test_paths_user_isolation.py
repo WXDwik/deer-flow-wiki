@@ -35,6 +35,19 @@ class TestUserDir:
         assert paths.user_dir("alice") == paths.base_dir / "users" / "alice"
 
 
+class TestUserWikiDir:
+    def test_user_wiki_dir(self, paths: Paths):
+        assert paths.user_wiki_dir("alice") == paths.base_dir / "users" / "alice" / "wiki"
+
+    def test_user_wiki_dir_validates_user_id(self, paths: Paths):
+        with pytest.raises(ValueError, match="Invalid user_id"):
+            paths.user_wiki_dir("../escape")
+
+    def test_host_user_wiki_dir(self, paths: Paths):
+        result = paths.host_user_wiki_dir("alice")
+        assert result.endswith("users\\alice\\wiki") or result.endswith("users/alice/wiki")
+
+
 class TestUserMemoryFile:
     def test_user_memory_file(self, paths: Paths):
         assert paths.user_memory_file("bob") == paths.base_dir / "users" / "bob" / "memory.json"

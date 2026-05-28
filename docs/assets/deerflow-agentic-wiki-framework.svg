@@ -1,0 +1,78 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" rx="32" fill="#0F172A"/>
+  <rect x="34" y="34" width="1212" height="652" rx="28" fill="#111827" stroke="#334155" stroke-width="2"/>
+
+  <text x="640" y="88" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="38" font-weight="700" fill="#F8FAFC">DeerFlow Agentic Knowledge Loop</text>
+  <text x="640" y="124" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" fill="#CBD5E1">from raw sources to maintained wiki, grounded research, and durable agent memory</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
+      <path d="M2 2L10 6L2 10" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#020617" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="86" y="212" width="210" height="146" rx="18" fill="#1E293B" stroke="#64748B"/>
+    <text x="191" y="252" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#F8FAFC">Raw Sources</text>
+    <text x="191" y="286" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CBD5E1">PDF / DOCX / PPT</text>
+    <text x="191" y="312" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CBD5E1">Markdown / Excel</text>
+    <text x="191" y="338" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#94A3B8">immutable evidence</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="382" y="184" width="250" height="202" rx="20" fill="#083344" stroke="#22D3EE"/>
+    <text x="507" y="226" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ECFEFF">Agentic Wiki</text>
+    <text x="507" y="262" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CFFAFE">sources / entities / concepts</text>
+    <text x="507" y="288" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CFFAFE">queries / synthesis / comparisons</text>
+    <text x="507" y="314" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#A5F3FC">index.md + log.md</text>
+    <text x="507" y="344" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#67E8F9">compiled once, kept current</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="718" y="158" width="240" height="140" rx="18" fill="#312E81" stroke="#818CF8"/>
+    <text x="838" y="198" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#EEF2FF">Lead Agent</text>
+    <text x="838" y="232" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#C7D2FE">plans, searches, reasons</text>
+    <text x="838" y="258" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#A5B4FC">archives valuable answers</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="718" y="358" width="240" height="140" rx="18" fill="#422006" stroke="#FBBF24"/>
+    <text x="838" y="398" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="20" font-weight="700" fill="#FFFBEB">Sub-agents</text>
+    <text x="838" y="432" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#FDE68A">parallel bounded tasks</text>
+    <text x="838" y="458" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#FCD34D">reports, analysis, code</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="1032" y="184" width="170" height="122" rx="18" fill="#052E16" stroke="#34D399"/>
+    <text x="1117" y="224" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="19" font-weight="700" fill="#ECFDF5">Sandbox</text>
+    <text x="1117" y="256" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" fill="#A7F3D0">files, bash, tools</text>
+    <text x="1117" y="280" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" fill="#6EE7B7">isolated runtime</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="1032" y="390" width="170" height="122" rx="18" fill="#4C1D95" stroke="#C084FC"/>
+    <text x="1117" y="430" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="19" font-weight="700" fill="#FAF5FF">Skills + MCP</text>
+    <text x="1117" y="462" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" fill="#E9D5FF">research workflows</text>
+    <text x="1117" y="486" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" fill="#D8B4FE">external tools</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="380" y="480" width="252" height="104" rx="18" fill="#1F2937" stroke="#94A3B8"/>
+    <text x="506" y="520" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="19" font-weight="700" fill="#F8FAFC">Memory</text>
+    <text x="506" y="552" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CBD5E1">preferences, facts, context</text>
+  </g>
+
+  <path d="M296 285H372" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M632 262C672 234 684 226 710 222" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M838 298V348" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M958 228H1022" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M958 428H1022" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M718 450C662 468 648 504 632 526" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M506 480V398" stroke="#38BDF8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="92" y="612" width="1096" height="38" rx="19" fill="#020617" stroke="#334155"/>
+  <text x="640" y="637" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="15" fill="#CBD5E1">Human curates sources and questions. DeerFlow maintains the knowledge graph, runs the work, and keeps useful results alive.</text>
+</svg>

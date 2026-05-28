@@ -77,13 +77,18 @@ def test_get_thread_mounts_includes_user_data_dirs(tmp_path, monkeypatch):
     """Baseline: user-data mounts must still be present after the ACP workspace change."""
     aio_mod = importlib.import_module("deerflow.community.aio_sandbox.aio_sandbox_provider")
     monkeypatch.setattr(aio_mod, "get_paths", lambda: Paths(base_dir=tmp_path))
+    monkeypatch.setattr(aio_mod, "get_effective_user_id", lambda: "alice")
 
     mounts = aio_mod.AioSandboxProvider._get_thread_mounts("thread-4")
-    container_paths = {m[1] for m in mounts}
+    container_paths = {m[1]: (m[0], m[2]) for m in mounts}
 
     assert "/mnt/user-data/workspace" in container_paths
     assert "/mnt/user-data/uploads" in container_paths
     assert "/mnt/user-data/outputs" in container_paths
+    assert "/mnt/user-wiki" in container_paths
+    host_path, read_only = container_paths["/mnt/user-wiki"]
+    assert host_path == str(tmp_path / "users" / "alice" / "wiki")
+    assert read_only is False
 
 
 def test_join_host_path_preserves_windows_drive_letter_style():
@@ -108,6 +113,7 @@ def test_get_thread_mounts_preserves_windows_host_path_style(tmp_path, monkeypat
     assert container_paths["/mnt/user-data/workspace"] == r"C:\Users\demo\deer-flow\backend\.deer-flow\threads\thread-10\user-data\workspace"
     assert container_paths["/mnt/user-data/uploads"] == r"C:\Users\demo\deer-flow\backend\.deer-flow\threads\thread-10\user-data\uploads"
     assert container_paths["/mnt/user-data/outputs"] == r"C:\Users\demo\deer-flow\backend\.deer-flow\threads\thread-10\user-data\outputs"
+    assert container_paths["/mnt/user-wiki"] == r"C:\Users\demo\deer-flow\backend\.deer-flow\users\default\wiki"
     assert container_paths["/mnt/acp-workspace"] == r"C:\Users\demo\deer-flow\backend\.deer-flow\threads\thread-10\acp-workspace"
 
 

@@ -79,6 +79,19 @@ export function clearReconnectRun(
   }
 }
 
+export function isRunNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const status = Reflect.get(error, "status");
+  return (
+    status === 404 &&
+    error.message.startsWith("HTTP 404:") &&
+    /Run [0-9a-f-]+ not found/.test(error.message)
+  );
+}
+
 function createCompatibleClient(isMock?: boolean): LangGraphClient {
   if (isStaticWebsiteOnly() && !isMock) {
     return createStaticClient();
@@ -110,6 +123,12 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
     } catch (error) {
       if (isInactiveRunStreamError(error)) {
         clearReconnectRun(threadId, runId);
+        return;
+      }
+      if (isRunNotFoundError(error)) {
+        if (typeof window !== "undefined" && threadId) {
+          window.sessionStorage.removeItem(`lg:stream:${threadId}`);
+        }
         return;
       }
       throw error;

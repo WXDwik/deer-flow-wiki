@@ -55,6 +55,35 @@ export function getMessageGroups(messages: Message[]): MessageGroup[] {
     return null;
   }
 
+  function groupWithToolCall(toolCallId: string | undefined) {
+    if (!toolCallId) {
+      return null;
+    }
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const group = groups[i];
+      if (!group) {
+        continue;
+      }
+      if (
+        group.messages.some(
+          (message) =>
+            message.type === "ai" &&
+            message.tool_calls?.some((toolCall) => toolCall.id === toolCallId),
+        )
+      ) {
+        return group;
+      }
+    }
+    return null;
+  }
+
+  function groupForToolMessage(message: Message) {
+    if (message.type !== "tool") {
+      return null;
+    }
+    return groupWithToolCall(message.tool_call_id) ?? lastOpenGroup();
+  }
+
   for (const message of messages) {
     if (isHiddenFromUIMessage(message)) {
       continue;
@@ -69,21 +98,16 @@ export function getMessageGroups(messages: Message[]): MessageGroup[] {
       if (isClarificationToolMessage(message)) {
         // Add to the preceding processing group to preserve tool-call association,
         // then also open a standalone clarification group for prominent display.
-        lastOpenGroup()?.messages.push(message);
+        groupForToolMessage(message)?.messages.push(message);
         groups.push({
           id: message.id,
           type: "assistant:clarification",
           messages: [message],
         });
       } else {
-        const open = lastOpenGroup();
+        const open = groupForToolMessage(message);
         if (open) {
           open.messages.push(message);
-        } else {
-          console.error(
-            "Unexpected tool message outside a processing group",
-            message,
-          );
         }
       }
       continue;

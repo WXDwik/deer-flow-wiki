@@ -93,6 +93,10 @@ export interface Translations {
     followupConfirmDescription: string;
     followupConfirmAppend: string;
     followupConfirmReplace: string;
+    ultraSuggestTitle: string;
+    ultraSuggestDescription: string;
+    ultraSuggestContinue: string;
+    ultraSuggestSwitch: string;
     suggestions: {
       suggestion: string;
       prompt: string;

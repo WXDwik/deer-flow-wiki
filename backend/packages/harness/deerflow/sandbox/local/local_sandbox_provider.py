@@ -117,6 +117,7 @@ class LocalSandboxProvider(SandboxProvider):
                 container_path,
                 _ACP_WORKSPACE_VIRTUAL_PREFIX,
                 _USER_DATA_VIRTUAL_PREFIX,
+                "/mnt/user-wiki",
             ]
             sandbox_config = config.sandbox
             if sandbox_config and sandbox_config.mounts:

@@ -455,6 +455,7 @@ You: "Deploying to staging..." [proceed]
 - User uploads: `/mnt/user-data/uploads` - Files uploaded by the user (automatically listed in context)
 - User workspace: `/mnt/user-data/workspace` - Working directory for temporary files
 - Output files: `/mnt/user-data/outputs` - Final deliverables must be saved here
+- User wiki databases: `/mnt/user-wiki` - Current user's shared LLM Wiki root; use sandbox file tools to list or inspect wiki instances here.
 
 **File Management:**
 - Uploaded files are automatically listed in the <uploaded_files> section before each request

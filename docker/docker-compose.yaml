@@ -78,6 +78,7 @@ services:
       - ${DEER_FLOW_EXTENSIONS_CONFIG_PATH}:/app/backend/extensions_config.json:ro
       - ../skills:/app/skills:ro
       - ${DEER_FLOW_HOME}:/app/backend/.deer-flow
+      - gateway-qmd-cache:/root/.cache/qmd
       # DooD: AioSandboxProvider starts sandbox containers via host Docker daemon
       - ${DEER_FLOW_DOCKER_SOCKET}:/var/run/docker.sock
       # CLI auth directories for auto-auth (Claude Code + Codex CLI)
@@ -131,6 +132,7 @@ services:
       - SANDBOX_IMAGE=enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:latest
       - SKILLS_HOST_PATH=${DEER_FLOW_REPO_ROOT}/skills
       - THREADS_HOST_PATH=${DEER_FLOW_HOME}/threads
+      - USER_WIKI_HOST_PATH=${DEER_FLOW_HOME}/users
       - KUBECONFIG_PATH=/root/.kube/config
       - NODE_HOST=host.docker.internal
       - K8S_API_SERVER=https://host.docker.internal:26443
@@ -149,3 +151,6 @@ services:
 networks:
   deer-flow:
     driver: bridge
+
+volumes:
+  gateway-qmd-cache:
