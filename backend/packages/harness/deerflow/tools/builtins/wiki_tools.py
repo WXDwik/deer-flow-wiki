@@ -157,8 +157,9 @@ def wiki_create_tool(
     an LLM Wiki / research wiki / knowledge base.
 
     The created wiki contains purpose.md, schema.md, raw/sources, raw/assets,
-    wiki/index.md, wiki/log.md, wiki/overview.md, wiki page folders, .obsidian,
-    and .llm-wiki internal state files.
+    wiki/index.md, wiki/log.md, wiki/overview.md, paper-oriented wiki page
+    folders such as background/idea/system_model/algorithm/datasets/summary/
+    concept/sources/synthesis, .obsidian, and .llm-wiki internal state files.
 
     Args:
         wiki_name_or_path: Wiki name or filesystem path. A plain name is created under the current user's shared wiki directory.

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import shutil
@@ -22,26 +22,35 @@ def test_new_wiki_has_versioned_schema_contract(tmp_path: Path) -> None:
     assert parse_schema_version(schema) == 1
     assert "schema_version: 1" in schema
     assert "Schema 演化规则" in schema
-    assert "语言与显示标题规则" in schema
-    assert "frontmatter `title`、页面一级标题、索引显示名和图谱节点标签" in schema
-    assert "[[Lite Transformer for UAD]]" in schema
-    assert "旧的小写 slug 链接仍可被系统解析" in schema
-    assert "`wiki/deepresearch/`" in schema
-    assert "`deepresearch`" in schema
-    assert "generated_from_wiki_at" in schema
+    assert "论文导入重点" in schema
+    assert "`wiki/background/`" in schema
+    assert "`wiki/idea/`" in schema
+    assert "`wiki/system_model/`" in schema
+    assert "`wiki/algorithm/`" in schema
+    assert "`wiki/datasets/`" in schema
+    assert "`wiki/summary/`" in schema
+    assert "`wiki/concept/`" in schema
+    assert "`wiki/synthesis/`" in schema
     assert paths.wiki_maintenance_dir.is_dir()
-    assert paths.wiki_deepresearch_dir.is_dir()
-    assert "## Deep Research" in paths.wiki_index_file.read_text(encoding="utf-8")
+    assert paths.wiki_background_dir.is_dir()
+    assert paths.wiki_idea_dir.is_dir()
+    assert paths.wiki_system_model_dir.is_dir()
+    assert paths.wiki_algorithm_dir.is_dir()
+    assert paths.wiki_datasets_dir.is_dir()
+    assert paths.wiki_summary_dir.is_dir()
+    assert paths.wiki_concept_dir.is_dir()
+    assert paths.wiki_synthesis_dir.is_dir()
+    assert "## Summary" in paths.wiki_index_file.read_text(encoding="utf-8")
     assert config["schema"]["current_version"] == 1
     assert config["schema"]["evolution_log"] == "wiki/maintenance/schema-changelog.md"
 
 
-def test_wiki_layout_requires_deepresearch_directory(tmp_path: Path) -> None:
+def test_wiki_layout_requires_synthesis_directory(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
 
     assert wiki_layout_exists(paths.root)
 
-    shutil.rmtree(paths.wiki_deepresearch_dir)
+    shutil.rmtree(paths.wiki_synthesis_dir)
 
     assert not wiki_layout_exists(paths.root)
 
@@ -116,3 +125,4 @@ def test_evolve_schema_apply_updates_schema_config_and_logs(tmp_path: Path) -> N
     assert "Add stable page creation rules." in (paths.wiki_maintenance_dir / "schema-changelog.md").read_text(encoding="utf-8")
     assert "schema-evolution" in paths.wiki_log_file.read_text(encoding="utf-8")
     assert WikiRepository(paths).read_config()["schema"]["current_version"] == 2
+

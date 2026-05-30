@@ -11,7 +11,7 @@ from typing import Any
 
 from deerflow.models import create_chat_model
 from deerflow.wiki.lint import LintIssue, lint_wiki, resolve_lint_mode
-from deerflow.wiki.paths import WikiPaths, display_slugify_name, slugify_name
+from deerflow.wiki.paths import WikiPaths, display_slugify_name, normalize_wiki_relative_path, slugify_name
 
 _MAX_FILE_CHARS = 12_000
 _MAX_TOTAL_CONTEXT_CHARS = 60_000
@@ -46,6 +46,7 @@ def _root_relative_markdown_path(paths: WikiPaths, page: str) -> Path | None:
         return None
     if not raw.startswith("wiki/"):
         raw = f"wiki/{raw}"
+    raw = normalize_wiki_relative_path(raw)
     candidate = (paths.root / raw).resolve()
     try:
         candidate.relative_to(paths.wiki_dir.resolve())
@@ -57,7 +58,7 @@ def _root_relative_markdown_path(paths: WikiPaths, page: str) -> Path | None:
 
 
 def _allowed_edit_path(paths: WikiPaths, raw_path: str) -> Path:
-    candidate = (paths.root / raw_path.strip().replace("\\", "/")).resolve()
+    candidate = (paths.root / normalize_wiki_relative_path(raw_path.strip().replace("\\", "/"))).resolve()
     try:
         candidate.relative_to(paths.wiki_dir.resolve())
     except ValueError as exc:
@@ -196,12 +197,14 @@ def build_repair_instructions(paths: WikiPaths, issues: list[LintIssue | dict]) 
                         "wiki/overview.md",
                         "wiki/log.md",
                         "wiki/sources/*.md",
-                        "wiki/concepts/*.md",
-                        "wiki/entities/*.md",
-                        "wiki/queries/*.md",
+                        "wiki/background/*.md",
+                        "wiki/idea/*.md",
+                        "wiki/system_model/*.md",
+                        "wiki/algorithm/*.md",
+                        "wiki/datasets/*.md",
+                        "wiki/summary/*.md",
+                        "wiki/concept/*.md",
                         "wiki/synthesis/*.md",
-                        "wiki/comparisons/*.md",
-                        "wiki/deepresearch/*.md",
                     ],
                     "instruction": (
                         "Repair this issue by editing Markdown files under wiki/ only. "

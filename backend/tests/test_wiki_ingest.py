@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -90,7 +90,7 @@ def test_ingest_file_copies_source_caches_markdown_and_writes_llm_pages(tmp_path
     assert "hyphenated slug links are accepted for compatibility" in prompt
 
     source_summary = paths.wiki_sources_dir / "paper.md"
-    concept_page = paths.wiki_concepts_dir / "Retrieval Augmented Generation.md"
+    concept_page = paths.wiki_concept_dir / "Retrieval Augmented Generation.md"
     assert "This source summarizes RAG." in source_summary.read_text(encoding="utf-8")
     assert "RAG combines retrieval" in concept_page.read_text(encoding="utf-8")
 
@@ -146,7 +146,7 @@ def test_ingest_file_preserves_space_filename_wikilinks_for_lint(tmp_path: Path)
                 "tags": ["cell-free"],
                 "pages": [
                     {
-                        "type": "entity",
+                        "type": "idea",
                         "title": "Cell-Free Massive MIMO",
                         "tags": ["mimo"],
                         "content": "A distributed massive MIMO architecture.",
@@ -165,8 +165,8 @@ def test_ingest_file_preserves_space_filename_wikilinks_for_lint(tmp_path: Path)
     with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
         ingest_file(paths, source_file)
 
-    entity_page = paths.wiki_entities_dir / "Cell-Free Massive MIMO.md"
-    concept_page = paths.wiki_concepts_dir / "CF-mMIMO Random Access.md"
+    entity_page = paths.wiki_idea_dir / "Cell-Free Massive MIMO.md"
+    concept_page = paths.wiki_concept_dir / "CF-mMIMO Random Access.md"
     assert entity_page.is_file()
     assert "[[Cell-Free Massive MIMO]]" in concept_page.read_text(encoding="utf-8")
     assert [issue for issue in lint_wiki(paths) if issue.type == "broken-link"] == []
@@ -193,7 +193,7 @@ def test_ingest_file_falls_back_when_model_output_is_invalid(tmp_path: Path) -> 
     assert "Important local content." in text
 
 
-def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None:
+def test_ingest_files_analyzes_batch_together(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
     first = tmp_path / "paper-a.md"
     second = tmp_path / "paper-b.md"
@@ -206,7 +206,7 @@ def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None
             {
                 "pages": [
                     {
-                        "type": "comparison",
+                        "type": "synthesis",
                         "title": "Method Comparison",
                         "tags": ["comparison"],
                         "content": "Method A and Method B should be compared together.",
@@ -220,15 +220,15 @@ def test_ingest_files_analyzes_batch_with_one_model_call(tmp_path: Path) -> None
         sources = ingest_files(paths, [first, second])
 
     assert len(sources) == 2
-    assert model.invoke.call_count == 1
+    assert model.invoke.call_count >= 1
     assert {source.metadata["ingest_mode"] for source in sources} == {"llm_batch"}
 
-    comparison = paths.wiki_comparisons_dir / "Method Comparison.md"
+    comparison = paths.wiki_synthesis_dir / "Method Comparison.md"
     assert comparison.is_file()
     assert "Method A and Method B" in comparison.read_text(encoding="utf-8")
 
     index = WikiRepository(paths).read_index()
-    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/comparisons/Method Comparison.md"]
+    comparison_pages = [page for page in index["pages"] if page["path"] == "wiki/synthesis/Method Comparison.md"]
     assert len(comparison_pages) == 1
     assert len(comparison_pages[0]["sources"]) == 2
 
@@ -279,7 +279,7 @@ def test_ingest_prompt_uses_configured_zh_language_for_english_source(tmp_path: 
     assert "Source language does not override the wiki language" in prompt
     assert "这篇论文讨论检索增强生成" in (paths.wiki_sources_dir / "english-paper.md").read_text(encoding="utf-8")
     assert "检索增强生成结合检索与生成能力" in (
-        paths.wiki_concepts_dir / "Retrieval Augmented Generation.md"
+        paths.wiki_concept_dir / "Retrieval Augmented Generation.md"
     ).read_text(encoding="utf-8")
 
 
@@ -454,6 +454,160 @@ def test_add_source_appends_operation_log(tmp_path: Path) -> None:
     assert "`raw/sources/notes.md`" in log
     assert "`wiki/sources/notes.md` (source)" in log
     assert "trigger: `add_source`" in log
+    assert "Maintenance:" in log
+    assert "wiki/index.md" in log
+    assert "wiki/overview.md" in log
+
+
+def test_add_source_rebuilds_index_and_overview(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "notes.md"
+    source_file.write_text("# Notes\n\nImportant local content.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "source_summary": "Notes summary linking [[Notes Concept]].",
+                "tags": ["notes"],
+                "pages": [
+                    {
+                        "type": "concept",
+                        "title": "Notes Concept",
+                        "tags": ["notes"],
+                        "content": "A durable concept linked back to [[notes]].",
+                    }
+                ],
+            }
+        )
+    )
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        result = add_source(str(paths.root), source_file)
+
+    index_text = paths.wiki_index_file.read_text(encoding="utf-8")
+    overview_text = paths.wiki_overview_file.read_text(encoding="utf-8")
+    assert "[[notes]]" in index_text
+    assert "[[Notes Concept]]" in index_text
+    assert "当前 wiki 已导入 1 份资料" in overview_text
+    assert "[[Notes Concept]]" in overview_text
+    assert result["metadata"]["maintenance"]["index"]["updated"] is True
+    assert result["metadata"]["maintenance"]["overview"]["updated"] is True
+
+
+def test_ingest_long_markdown_processes_content_after_40k_chars(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "long-paper.md"
+    late_marker = "LATE_RESULT_MARKER improves the final error rate."
+    source_file.write_text("# Long Paper\n\n" + ("filler text\n" * 9000) + f"\n## Results\n\n{late_marker}\n", encoding="utf-8")
+
+    model = MagicMock()
+
+    def respond(prompt: str, *args, **kwargs):
+        run_name = kwargs.get("config", {}).get("run_name")
+        if run_name == "wiki_ingest_chunk_notes":
+            finding = late_marker if late_marker in prompt else "early filler"
+            return AIMessage(
+                content=json.dumps(
+                    {
+                        "chunk_note": {
+                            "source_id": "source-from-prompt",
+                            "findings": [finding],
+                            "results_seen": [finding] if late_marker in prompt else [],
+                        }
+                    }
+                )
+            )
+        if run_name == "wiki_ingest_notes":
+            assert late_marker in prompt
+            return AIMessage(
+                content=json.dumps(
+                    {
+                        "paper_notes": [
+                            {
+                                "source_id": json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nChunk notes:", 1)[0])[0]["source_id"],
+                                "display_title": "Long Paper",
+                                "research_problem": "Long-document ingestion.",
+                                "core_contributions": [late_marker],
+                                "method": "Full Markdown chunk processing.",
+                                "experiments": "Reported in late chunks.",
+                                "results": late_marker,
+                                "limitations": "Not found.",
+                                "important_terms": ["Long Context"],
+                                "candidate_pages": [{"type": "concept", "title": "Long Context", "reason": "Important term."}],
+                            }
+                        ]
+                    }
+                )
+            )
+        return AIMessage(
+            content=json.dumps(
+                {
+                    "sources": [
+                        {
+                            "source_id": json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nPaper notes:", 1)[0])[0]["source_id"],
+                            "display_title": "Long Paper",
+                            "source_summary": f"完整导入后保留后段结果：{late_marker} 相关页面 [[Long Context]]。",
+                            "tags": ["long"],
+                        }
+                    ],
+                    "pages": [
+                        {
+                            "type": "concept",
+                            "title": "Long Context",
+                            "source_ids": [],
+                            "tags": ["long"],
+                            "content": f"Long-document processing captures late evidence from [[Long Paper]]: {late_marker}",
+                        }
+                    ],
+                }
+            )
+        )
+
+    model.invoke.side_effect = respond
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    source_page = paths.wiki_sources_dir / "Long Paper.md"
+    assert late_marker in source_page.read_text(encoding="utf-8")
+    assert source.metadata["ingest_input"]["complete_markdown_processed"] is True
+    assert source.metadata["ingest_input"]["chunk_count"] > 1
+
+
+def test_ingest_quality_retry_repairs_placeholder_summary(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "paper.md"
+    source_file.write_text("# Paper\n\nThis paper studies a reusable method.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.side_effect = [
+        AIMessage(content=json.dumps({"source_summary": "待补充", "tags": [], "pages": []})),
+        AIMessage(
+            content=json.dumps(
+                {
+                    "source_summary": "Better source summary with [[Reusable Method]].",
+                    "tags": ["method"],
+                    "pages": [
+                        {
+                            "type": "concept",
+                            "title": "Reusable Method",
+                            "tags": ["method"],
+                            "content": "Reusable Method is linked to [[paper]].",
+                        }
+                    ],
+                }
+            )
+        ),
+    ]
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    assert "Better source summary" in (paths.wiki_sources_dir / "paper.md").read_text(encoding="utf-8")
+    assert source.metadata["quality"]["initial_issues"]
+    assert source.metadata["quality"]["resolved"] is True
+    assert model.invoke.call_count == 2
 
 
 def test_add_sources_returns_batch_lint_result(tmp_path: Path) -> None:
@@ -590,7 +744,7 @@ def test_sync_pending_sources_batches_unique_pending_files(tmp_path: Path) -> No
             {
                 "pages": [
                     {
-                        "type": "comparison",
+                        "type": "synthesis",
                         "title": "Pending Source Comparison",
                         "tags": ["sync"],
                         "content": "Compare the pending sources together.",
@@ -605,8 +759,8 @@ def test_sync_pending_sources_batches_unique_pending_files(tmp_path: Path) -> No
 
     assert result["processed_count"] == 2
     assert result["failed_count"] == 0
-    assert model.invoke.call_count == 1
-    assert (paths.wiki_comparisons_dir / "Pending Source Comparison.md").is_file()
+    assert model.invoke.call_count >= 1
+    assert (paths.wiki_synthesis_dir / "Pending Source Comparison.md").is_file()
 
 
 def test_sync_pending_sources_imports_only_unparsed_raw_files(tmp_path: Path) -> None:
@@ -677,3 +831,4 @@ def test_sync_pending_sources_respects_limit(tmp_path: Path) -> None:
     counts = status["counts"]
     assert counts["parsed"] == 1
     assert counts["pending"] == 1
+

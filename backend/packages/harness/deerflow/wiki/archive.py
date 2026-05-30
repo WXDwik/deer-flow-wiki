@@ -34,7 +34,7 @@ from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.schema import schema_context
 
 _MAX_CONTEXT_PAGE_CHARS = 8_000
-_ARCHIVE_PAGE_TYPES = {"query", "synthesis", "comparison", "concept", "entity"}
+_ARCHIVE_PAGE_TYPES = {"synthesis", "summary", "concept", "idea", "query", "comparison", "entity"}
 _ARCHIVE_ACTIONS = {"none", "create_page", "update_existing", "create_and_update"}
 _UPDATE_OPERATIONS = {"replace", "append", "rewrite"}
 
@@ -113,16 +113,16 @@ def judge_archive_value(
 
 Decide the archival action:
 - none: temporary, duplicate, insufficiently sourced, or not reusable.
-- create_page: the answer has independent long-term value as a standalone query,
-  synthesis, or comparison page.
+- create_page: the answer has independent long-term value as a synthesis page
+  or a paper-writing summary page.
 - update_existing: the answer only adds a local correction or small supplement to
   existing entity/concept/synthesis pages.
 - create_and_update: the answer deserves a new page and should also update related
   existing pages with a short summary/link.
 
-Prefer create_and_update only when both are clearly useful. Use concept/entity
-page types cautiously; most standalone answer archives should be query,
-synthesis, or comparison.
+Prefer create_and_update only when both are clearly useful. Most standalone
+answer archives should be synthesis. Use summary only when the answer is a
+one-paragraph literature-review style statement.
 
 Follow the active schema.md contract below when deciding whether and how to
 write back:
@@ -135,9 +135,9 @@ Return ONLY valid JSON:
   "should_archive": true,
   "reason": "short reason",
   "action": "none|create_page|update_existing|create_and_update",
-  "page_type": "query|synthesis|comparison|concept|entity|null",
+  "page_type": "synthesis|summary|concept|idea|null",
   "suggested_title": "concise reader-facing title preserving source language and capitalization, or null",
-  "target_pages": ["wiki/concepts/example.md"],
+  "target_pages": ["wiki/concept/example.md"],
   "tags": ["archived-query"],
   "cited_pages": ["wiki/sources/source.md"]
 }}
@@ -183,11 +183,9 @@ Retrieved context pages:
 
 def _default_page_type(question: str, context_pages: list[WikiContextPage]) -> str:
     lowered = question.lower()
-    if any(term in lowered for term in ("compare", "comparison", "vs", "versus", "对比", "比较")):
-        return "comparison"
-    if len(context_pages) >= 2:
-        return "synthesis"
-    return "query"
+    if any(term in lowered for term in ("研究现状", "related work", "literature review", "第一章")):
+        return "summary"
+    return "synthesis"
 
 
 def build_archive_page(
@@ -284,6 +282,14 @@ def _archive_page_path(paths: WikiPaths, draft: ArchiveDraft) -> Path:
         return concept_page_path(paths, draft.title)
     if draft.page_type == "entity":
         return entity_page_path(paths, draft.title)
+    if draft.page_type == "summary":
+        from deerflow.wiki.paths import summary_page_path
+
+        return summary_page_path(paths, draft.title)
+    if draft.page_type == "idea":
+        from deerflow.wiki.paths import idea_page_path
+
+        return idea_page_path(paths, draft.title)
     raise ValueError(f"Unsupported archive page type: {draft.page_type}")
 
 
@@ -334,7 +340,7 @@ def build_existing_page_updates(
     model_name: str | None = None,
 ) -> list[WikiPageChange]:
     """Ask the model for precise local edits to existing wiki pages."""
-    target_pages = decision.target_pages or [page.path for page in context_pages if page.page_type in {"concept", "entity", "synthesis"}]
+    target_pages = decision.target_pages or [page.path for page in context_pages if page.page_type in {"concept", "idea", "summary", "synthesis", "entity"}]
     target_pages = sorted(dict.fromkeys(target_pages))
     context: dict[str, str] = {}
     for rel in target_pages:
@@ -368,7 +374,7 @@ Return ONLY valid JSON:
 {{
   "changes": [
     {{
-      "path": "wiki/concepts/example.md",
+      "path": "wiki/concept/example.md",
       "operation": "append|replace|rewrite",
       "reason": "why this page changes",
       "content": "for append/rewrite",
@@ -453,8 +459,10 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
         "query": "## Queries",
         "synthesis": "## Synthesis",
         "comparison": "## Comparisons",
-        "concept": "## Concepts",
-        "entity": "## Entities",
+        "summary": "## Summary",
+        "concept": "## Concept",
+        "idea": "## Idea",
+        "entity": "## Idea",
         "source": "## Sources",
     }.get(archived_page.page_type, "## Queries")
     stem = Path(archived_page.path).stem

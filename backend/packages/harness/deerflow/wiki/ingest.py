@@ -19,25 +19,41 @@ from deerflow.wiki.markdown import build_source_summary_markdown, frontmatter
 from deerflow.wiki.models import RawSource, WikiPage
 from deerflow.wiki.paths import (
     WikiPaths,
+    algorithm_page_path,
+    background_page_path,
     comparison_page_path,
     concept_page_path,
+    dataset_page_path,
     entity_page_path,
+    idea_page_path,
     query_page_path,
     raw_source_path,
     source_summary_path,
+    summary_page_path,
     synthesis_page_path,
+    system_model_page_path,
     unique_child_path,
 )
 from deerflow.wiki.purpose import wiki_language_instruction
 from deerflow.wiki.repository import WikiRepository
 
-_MAX_LLM_MARKDOWN_CHARS = 40_000
-_MAX_BATCH_LLM_MARKDOWN_CHARS = 120_000
+_MAX_INLINE_MARKDOWN_CHARS = 80_000
+_MAX_MARKDOWN_CHUNK_CHARS = 24_000
+_MAX_NOTES_CONTEXT_CHARS = 80_000
+_QUALITY_PLACEHOLDERS = ("待补充", "TODO", "TBD", "Pending source summary.")
 _PAGE_TYPE_PATHS = {
-    "entity": entity_page_path,
+    "background": background_page_path,
+    "idea": idea_page_path,
+    "system_model": system_model_page_path,
+    "algorithm": algorithm_page_path,
+    "dataset": dataset_page_path,
+    "datasets": dataset_page_path,
+    "summary": summary_page_path,
     "concept": concept_page_path,
-    "query": query_page_path,
     "synthesis": synthesis_page_path,
+    # Legacy aliases.
+    "entity": entity_page_path,
+    "query": query_page_path,
     "comparison": comparison_page_path,
 }
 
@@ -157,38 +173,118 @@ def _wiki_context(paths: WikiPaths) -> str:
     return "\n\n".join(parts)
 
 
-def _source_markdown_sections(paths: WikiPaths, prepared_sources: list[PreparedSource]) -> str:
-    sections: list[str] = []
-    remaining = _MAX_BATCH_LLM_MARKDOWN_CHARS
-    per_source_cap = min(
-        _MAX_LLM_MARKDOWN_CHARS,
-        max(8_000, _MAX_BATCH_LLM_MARKDOWN_CHARS // max(len(prepared_sources), 1)),
-    )
+def _chunk_markdown(text: str, *, max_chars: int = _MAX_MARKDOWN_CHUNK_CHARS) -> list[str]:
+    """Split Markdown in document order without dropping any content."""
+    if len(text) <= max_chars:
+        return [text]
 
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in text.splitlines(keepends=True):
+        if current and current_len + len(line) > max_chars:
+            chunks.append("".join(current))
+            current = []
+            current_len = 0
+        if len(line) > max_chars:
+            for index in range(0, len(line), max_chars):
+                part = line[index : index + max_chars]
+                if current:
+                    chunks.append("".join(current))
+                    current = []
+                    current_len = 0
+                chunks.append(part)
+            continue
+        current.append(line)
+        current_len += len(line)
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
+def _source_markdown_chunks(paths: WikiPaths, prepared_sources: list[PreparedSource]) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
     for item in prepared_sources:
-        if remaining <= 0:
-            break
-        source = item.source
-        cap = min(per_source_cap, remaining)
-        markdown = item.cached_markdown.read_text(encoding="utf-8", errors="ignore")[:cap]
-        remaining -= len(markdown)
+        markdown = item.cached_markdown.read_text(encoding="utf-8", errors="ignore")
+        source_chunks = _chunk_markdown(markdown)
+        for index, chunk in enumerate(source_chunks, 1):
+            chunks.append(
+                {
+                    "source_id": item.source.source_id,
+                    "title": item.source.title,
+                    "raw_path": item.source.path,
+                    "cached_markdown_path": item.cached_markdown.relative_to(paths.root).as_posix(),
+                    "chunk_index": index,
+                    "chunk_count": len(source_chunks),
+                    "markdown": chunk,
+                }
+            )
+    return chunks
+
+
+def _source_markdown_sections_from_chunks(chunks: list[dict[str, Any]]) -> str:
+    sections: list[str] = []
+    for chunk in chunks:
+        suffix = f" chunk {chunk['chunk_index']}/{chunk['chunk_count']}" if chunk["chunk_count"] > 1 else ""
         sections.append(
-            f"""## Source: {source.title}
-source_id: {source.source_id}
-raw_path: {source.path}
-cached_markdown_path: {item.cached_markdown.relative_to(paths.root).as_posix()}
+            f"""## Source: {chunk['title']}{suffix}
+source_id: {chunk['source_id']}
+raw_path: {chunk['raw_path']}
+cached_markdown_path: {chunk['cached_markdown_path']}
 
 ```markdown
-{markdown}
+{chunk['markdown']}
 ```"""
         )
 
     return "\n\n".join(sections)
 
 
-def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[PreparedSource], *, model_name: str | None = None) -> dict[str, Any]:
-    """Ask the configured chat model to summarize and classify a batch of sources together."""
-    source_manifest = [
+def _model_text(response: object) -> str:
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        return "\n".join(str(item) for item in content)
+    return str(content)
+
+
+def _invoke_json(model: Any, prompt: str, *, run_name: str) -> dict[str, Any]:
+    data = _json_from_model_text(_model_text(model.invoke(prompt, config={"run_name": run_name})))
+    if data is None:
+        raise ValueError(f"{run_name} model did not return valid JSON")
+    return data
+
+
+def _looks_like_final_wiki_content(data: dict[str, Any]) -> bool:
+    if "source_summary" in data or "pages" in data:
+        return "paper_notes" not in data and "chunk_notes" not in data
+    sources = data.get("sources")
+    if isinstance(sources, list) and any(isinstance(item, dict) and "source_summary" in item for item in sources):
+        return "paper_notes" not in data and "chunk_notes" not in data
+    return False
+
+
+def _paper_ingest_guidance(paths: WikiPaths) -> str:
+    return f"""## Built-in wiki-paper-ingest guidance
+
+- Read the complete converted Markdown. Do not rely only on the beginning or abstract.
+- Paper structures are not fixed. Identify title, abstract, body, method, experiments, results, conclusion, references, and figure/table captions from the available Markdown when present.
+- Prefer durable research notes over a short abstract.
+- Preserve original capitalization for English paper titles, model names, method names, acronyms, datasets, and metrics.
+- For a zh-CN wiki, explain in Chinese, but do not force-translate technical identifiers.
+- Every factual claim must be grounded in the imported Markdown. Do not add background knowledge that is not in the source.
+- If experiments, results, or limitations are absent from the Markdown, mark them as not found instead of inventing them.
+- Return strict JSON only: no Markdown fence, no prose wrapper, no code block.
+- Treat schema.md in the wiki context as the active contract for directory structure, page types, source traceability, and write-back behavior.
+- Source language does not override the wiki language.
+- Source display_title and page title are reader-facing labels; preserve readable titles and conventional capitalization.
+- Wikilinks must target existing page filename stems without .md, for example [[Lite Transformer for UAD]].
+- Old lowercase or hyphenated slug links are accepted for compatibility, but newly generated links should use the actual page stem when it is available.
+
+{wiki_language_instruction(paths)}"""
+
+
+def _source_manifest(paths: WikiPaths, prepared_sources: list[PreparedSource]) -> list[dict[str, str]]:
+    return [
         {
             "source_id": item.source.source_id,
             "title": item.source.title,
@@ -197,58 +293,38 @@ def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[Prepare
         }
         for item in prepared_sources
     ]
-    prompt = f"""You are maintaining a local LLM Wiki.
 
-Read the wiki context and ALL imported source Markdown together. Return ONLY valid JSON:
+
+def _notes_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]], chunks: list[dict[str, Any]]) -> str:
+    return f"""You are reading imported academic sources for a local LLM Wiki.
+
+Return ONLY valid JSON:
 {{
-  "sources": [
+  "paper_notes": [
     {{
       "source_id": "exact source_id from the manifest",
-      "display_title": "Human-readable source title, preserving original capitalization",
-      "source_summary": "Markdown summary for this source page",
-      "tags": ["short-tag"]
-    }}
-  ],
-  "pages": [
-    {{
-      "type": "entity|concept|query|synthesis|comparison",
-      "title": "Human-readable page title, preserving original capitalization",
-      "source_ids": ["source ids that support this page"],
-      "tags": ["short-tag"],
-      "content": "Markdown body. Use wikilinks targeting existing page filename stems, like [[Readable Page Stem]], when useful."
+      "display_title": "reader-facing title",
+      "metadata": {{"authors": [], "venue": "", "year": "", "doi": "", "keywords": []}},
+      "research_problem": "",
+      "core_contributions": [],
+      "method": "",
+      "experiments": "",
+      "results": "",
+      "limitations": "",
+      "important_terms": [],
+      "candidate_pages": [{{"type": "background|idea|system_model|algorithm|dataset|summary|concept|synthesis", "title": "", "reason": ""}}],
+      "coverage_warnings": []
     }}
   ]
 }}
 
 Rules:
-- Treat schema.md in the wiki context as the active contract for directory
-  structure, page types, source traceability, and write-back behavior.
-- Follow the target wiki language rules below for every generated source
-  summary and page body. Source language does not override the wiki language.
-- Use source_id values exactly as listed in the manifest.
-- Return one source summary for each imported source.
-- Base every statement on the imported sources.
-- Prefer a compact source summary per source plus high-value classification pages.
-- When multiple sources are imported, actively look for cross-source synthesis,
-  comparison, shared concepts, contradictions, and complementary evidence.
-- For a page supported by multiple sources, include all relevant source_ids.
-- Page content must be Markdown body only: no YAML frontmatter and no duplicate
-  top-level # title.
-- Source display_title and page title are reader-facing labels. Preserve the
-  source language and the original or conventional capitalization of paper
-  titles, proper nouns, model names, methods, datasets, authors, organizations,
-  and acronyms (for example MIMO, UAD, Transformer, Deep Learning). Do not
-  return lowercase slugs as visible titles when a readable title can be
-  recovered from the imported source.
-- Wikilinks must target existing page filename stems without .md. New generated
-  page filenames preserve normal spaces from their readable titles, so link to
-  a page titled "Lite Transformer for UAD" as [[Lite Transformer for UAD]].
-  Old lowercase or hyphenated slug links are accepted for compatibility, but
-  newly generated links should use the actual page stem when it is available.
-- Only link to pages that already exist or pages returned in this JSON response.
-- Do not invent facts.
+- Produce paper-level structured notes only; do not write final wiki pages yet.
+- Cover the complete provided Markdown, including later sections if present.
+- Do not assume a fixed paper structure.
+- Use source_id values exactly as listed.
 
-{wiki_language_instruction(paths)}
+{_paper_ingest_guidance(paths)}
 
 Wiki context:
 {_wiki_context(paths)}
@@ -257,17 +333,269 @@ Imported source manifest:
 {json.dumps(source_manifest, ensure_ascii=False, indent=2)}
 
 Imported sources:
-{_source_markdown_sections(paths, prepared_sources)}
+{_source_markdown_sections_from_chunks(chunks)}
 """
+
+
+def _chunk_notes_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]], chunk: dict[str, Any]) -> str:
+    return f"""You are reading one sequential Markdown chunk from an imported academic source.
+
+Return ONLY valid JSON:
+{{
+  "chunk_note": {{
+    "source_id": "{chunk['source_id']}",
+    "chunk_index": {chunk['chunk_index']},
+    "chunk_count": {chunk['chunk_count']},
+    "findings": [],
+    "metadata_seen": {{}},
+    "methods_seen": [],
+    "experiments_seen": [],
+    "results_seen": [],
+    "limitations_seen": [],
+    "candidate_terms": [],
+    "coverage_warnings": []
+  }}
+}}
+
+Rules:
+- Analyze this chunk in document order. It may be any part of the paper.
+- Do not summarize only the abstract if later content is present in the chunk.
+- Do not invent missing sections.
+
+{_paper_ingest_guidance(paths)}
+
+Imported source manifest:
+{json.dumps(source_manifest, ensure_ascii=False, indent=2)}
+
+## Source: {chunk['title']} chunk {chunk['chunk_index']}/{chunk['chunk_count']}
+source_id: {chunk['source_id']}
+raw_path: {chunk['raw_path']}
+
+```markdown
+{chunk['markdown']}
+```
+"""
+
+
+def _aggregate_notes_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]], chunk_notes: list[dict[str, Any]]) -> str:
+    return f"""Merge sequential chunk notes into paper-level notes for wiki ingestion.
+
+Return ONLY valid JSON using this shape:
+{{
+  "paper_notes": [
+    {{
+      "source_id": "exact source_id from the manifest",
+      "display_title": "reader-facing title",
+      "metadata": {{"authors": [], "venue": "", "year": "", "doi": "", "keywords": []}},
+      "research_problem": "",
+      "core_contributions": [],
+      "method": "",
+      "experiments": "",
+      "results": "",
+      "limitations": "",
+      "important_terms": [],
+      "candidate_pages": [{{"type": "background|idea|system_model|algorithm|dataset|summary|concept|synthesis", "title": "", "reason": ""}}],
+      "coverage_warnings": []
+    }}
+  ]
+}}
+
+Rules:
+- Use all chunk notes. Later chunks may contain the important results and conclusion.
+- Preserve uncertainty and missing-section warnings.
+- Do not invent facts beyond the chunk notes.
+
+{_paper_ingest_guidance(paths)}
+
+Imported source manifest:
+{json.dumps(source_manifest, ensure_ascii=False, indent=2)}
+
+Chunk notes:
+{json.dumps(chunk_notes, ensure_ascii=False, indent=2)[:_MAX_NOTES_CONTEXT_CHARS]}
+"""
+
+
+def _final_wiki_content_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]], notes: dict[str, Any]) -> str:
+    return f"""You are maintaining a local LLM Wiki from complete paper notes.
+
+Return ONLY valid JSON:
+{{
+  "sources": [
+    {{
+      "source_id": "exact source_id from the manifest",
+      "display_title": "Human-readable source title, preserving original capitalization",
+      "source_summary": "High-quality Markdown source page body",
+      "tags": ["short-tag"]
+    }}
+  ],
+  "pages": [
+    {{
+      "type": "background|idea|system_model|algorithm|dataset|summary|concept|synthesis",
+      "title": "Human-readable page title, preserving original capitalization",
+      "source_ids": ["source ids that support this page"],
+      "tags": ["short-tag"],
+      "content": "Markdown body. Use wikilinks targeting existing or generated page filename stems when useful."
+    }}
+  ]
+}}
+
+Rules:
+- Return one source summary for each imported source.
+- Source summaries must include metadata when available, research problem, core contributions, method, experiments/results, conclusions, limitations, and links to key generated pages.
+- Prefer page types by paper-reading purpose: background for concise background, idea for innovations, system_model for problem/system model, algorithm for method or model procedure, dataset for datasets/simulation settings, summary for one-paragraph research-status text suitable for a paper introduction, concept for reusable terms, and synthesis for cross-source insights or useful archived answers.
+- Do not output placeholder text such as 待补充, TODO, TBD, or Pending.
+- Create reusable background/idea/system_model/algorithm/dataset/summary/concept/synthesis pages for important paper content, methods, datasets, metrics, literature-review statements, and cross-source insights.
+- Add useful wikilinks. Only link to pages that already exist or pages returned in this JSON response.
+- Base every statement on the paper notes.
+- Page content must be Markdown body only: no YAML frontmatter and no duplicate top-level # title.
+
+{_paper_ingest_guidance(paths)}
+
+Wiki context:
+{_wiki_context(paths)}
+
+Imported source manifest:
+{json.dumps(source_manifest, ensure_ascii=False, indent=2)}
+
+Paper notes:
+{json.dumps(notes, ensure_ascii=False, indent=2)[:_MAX_NOTES_CONTEXT_CHARS]}
+"""
+
+
+def _content_quality_issues(prepared_sources: list[PreparedSource], content: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    source_payloads = _source_summary_payloads(prepared_sources, content)
+    for item in prepared_sources:
+        payload = source_payloads.get(item.source.source_id, {})
+        summary = str(payload.get("source_summary") or "").strip()
+        if not summary:
+            issues.append(f"missing source_summary for {item.source.source_id}")
+        if any(placeholder.lower() in summary.lower() for placeholder in _QUALITY_PLACEHOLDERS):
+            issues.append(f"placeholder source_summary for {item.source.source_id}")
+
+    pages = [page for page in content.get("pages", []) if isinstance(page, dict)]
+    if not pages:
+        issues.append("no generated knowledge pages")
+    return issues
+
+
+def _repair_content_quality(
+    paths: WikiPaths,
+    model: Any,
+    source_manifest: list[dict[str, str]],
+    notes: dict[str, Any],
+    content: dict[str, Any],
+    issues: list[str],
+) -> dict[str, Any] | None:
+    prompt = f"""Repair this wiki ingest JSON so it passes the quality requirements.
+
+Issues:
+{json.dumps(issues, ensure_ascii=False, indent=2)}
+
+Return ONLY the repaired final wiki JSON with the same shape:
+{{
+  "sources": [{{"source_id": "", "display_title": "", "source_summary": "", "tags": []}}],
+  "pages": [{{"type": "background|idea|system_model|algorithm|dataset|summary|concept|synthesis", "title": "", "source_ids": [], "tags": [], "content": ""}}]
+}}
+
+Rules:
+- Remove placeholders.
+- Add at least one durable generated page when the notes contain reusable concepts/entities.
+- Add useful wikilinks between generated pages/source summaries where supported.
+- Do not invent facts beyond the notes.
+
+{_paper_ingest_guidance(paths)}
+
+Imported source manifest:
+{json.dumps(source_manifest, ensure_ascii=False, indent=2)}
+
+Paper notes:
+{json.dumps(notes, ensure_ascii=False, indent=2)[:_MAX_NOTES_CONTEXT_CHARS]}
+
+Current final wiki JSON:
+{json.dumps(content, ensure_ascii=False, indent=2)[:_MAX_NOTES_CONTEXT_CHARS]}
+"""
+    try:
+        return _invoke_json(model, prompt, run_name="wiki_ingest_quality_repair")
+    except Exception:
+        return None
+
+
+def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[PreparedSource], *, model_name: str | None = None) -> dict[str, Any]:
+    """Ask the configured chat model to read complete Markdown and generate wiki pages."""
     model = create_chat_model(name=model_name, thinking_enabled=False)
-    response = model.invoke(prompt, config={"run_name": "wiki_ingest"})
-    content = getattr(response, "content", response)
-    if isinstance(content, list):
-        content = "\n".join(str(item) for item in content)
-    data = _json_from_model_text(str(content))
-    if data is None:
-        raise ValueError("Wiki ingest model did not return valid JSON")
-    return data
+    source_manifest = _source_manifest(paths, prepared_sources)
+    chunks = _source_markdown_chunks(paths, prepared_sources)
+    total_markdown_chars = sum(len(str(chunk.get("markdown") or "")) for chunk in chunks)
+
+    notes: dict[str, Any]
+    if total_markdown_chars <= _MAX_INLINE_MARKDOWN_CHARS:
+        notes = _invoke_json(model, _notes_prompt(paths, source_manifest, chunks), run_name="wiki_ingest_notes")
+        if _looks_like_final_wiki_content(notes):
+            content = notes
+        else:
+            content = _invoke_json(
+                model,
+                _final_wiki_content_prompt(paths, source_manifest, notes),
+                run_name="wiki_ingest",
+            )
+    else:
+        chunk_notes: list[dict[str, Any]] = []
+        for chunk in chunks:
+            chunk_notes.append(
+                _invoke_json(
+                    model,
+                    _chunk_notes_prompt(paths, source_manifest, chunk),
+                    run_name="wiki_ingest_chunk_notes",
+                )
+            )
+        notes = _invoke_json(
+            model,
+            _aggregate_notes_prompt(paths, source_manifest, chunk_notes),
+            run_name="wiki_ingest_notes",
+        )
+        if _looks_like_final_wiki_content(notes):
+            content = notes
+        else:
+            content = _invoke_json(
+                model,
+                _final_wiki_content_prompt(paths, source_manifest, notes),
+                run_name="wiki_ingest",
+            )
+
+    initial_issues = _content_quality_issues(prepared_sources, content)
+    if initial_issues:
+        repaired = _repair_content_quality(paths, model, source_manifest, notes if "notes" in locals() else content, content, initial_issues)
+        if repaired is not None:
+            repaired_issues = _content_quality_issues(prepared_sources, repaired)
+            if len(repaired_issues) <= len(initial_issues):
+                content = repaired
+                content["_quality_retry"] = {
+                    "initial_issues": initial_issues,
+                    "remaining_issues": repaired_issues,
+                    "resolved": not repaired_issues,
+                }
+            else:
+                content["_quality_retry"] = {
+                    "initial_issues": initial_issues,
+                    "remaining_issues": initial_issues,
+                    "resolved": False,
+                }
+        else:
+            content["_quality_retry"] = {
+                "initial_issues": initial_issues,
+                "remaining_issues": initial_issues,
+                "resolved": False,
+            }
+    else:
+        content["_quality_retry"] = {"initial_issues": [], "remaining_issues": [], "resolved": True}
+
+    content["_ingest_input"] = {
+        "cached_markdown_chars": total_markdown_chars,
+        "chunk_count": len(chunks),
+        "complete_markdown_processed": True,
+    }
+    return content
 
 
 def generate_wiki_content(paths: WikiPaths, source: RawSource, cached_markdown: Path, *, model_name: str | None = None) -> dict[str, Any]:
@@ -321,10 +649,17 @@ def _page_path(paths: WikiPaths, page_type: str, title: str) -> Path:
     except ValueError:
         digest = hashlib.sha1(title.encode("utf-8")).hexdigest()[:12]
         directory = {
-            "entity": paths.wiki_entities_dir,
-            "concept": paths.wiki_concepts_dir,
-            "query": paths.wiki_queries_dir,
+            "background": paths.wiki_background_dir,
+            "idea": paths.wiki_idea_dir,
+            "system_model": paths.wiki_system_model_dir,
+            "algorithm": paths.wiki_algorithm_dir,
+            "dataset": paths.wiki_datasets_dir,
+            "datasets": paths.wiki_datasets_dir,
+            "summary": paths.wiki_summary_dir,
+            "concept": paths.wiki_concept_dir,
             "synthesis": paths.wiki_synthesis_dir,
+            "entity": paths.wiki_entities_dir,
+            "query": paths.wiki_queries_dir,
             "comparison": paths.wiki_comparisons_dir,
         }[page_type]
         return unique_child_path(directory, f"page-{digest}.md")
@@ -417,6 +752,8 @@ def write_generated_batch_pages(
         if not isinstance(item, dict):
             continue
         page_type = str(item.get("type") or "").strip()
+        if page_type == "datasets":
+            page_type = "dataset"
         if page_type not in _PAGE_TYPE_PATHS:
             continue
         title = str(item.get("title") or "").strip()
@@ -494,6 +831,10 @@ def ingest_files(paths: WikiPaths, source_files: list[str | Path], *, model_name
 
     for item in prepared_sources:
         item.source.metadata["ingest_mode"] = ingest_mode
+        if isinstance(generated.get("_ingest_input"), dict):
+            item.source.metadata["ingest_input"] = generated["_ingest_input"]
+        if isinstance(generated.get("_quality_retry"), dict):
+            item.source.metadata["quality"] = generated["_quality_retry"]
 
     pages = write_generated_batch_pages(paths, prepared_sources, generated, now)
     sources = [item.source for item in prepared_sources]

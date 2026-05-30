@@ -86,10 +86,6 @@ def build_source_summary_markdown(
 
 {summary}
 
-## Key Points
-
-- 待补充。
-
 ## Source
 
 - `{source_path}`

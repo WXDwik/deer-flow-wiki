@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -13,7 +13,7 @@ from deerflow.wiki.service import research_context
 
 def test_research_context_uses_qmd_query_without_vsearch(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    page = paths.wiki_concepts_dir / "alpha.md"
+    page = paths.wiki_concept_dir / "alpha.md"
     page.write_text("# Alpha\n\nAlpha method evidence.", encoding="utf-8")
 
     calls: list[list[str]] = []
@@ -29,7 +29,7 @@ def test_research_context_uses_qmd_query_without_vsearch(tmp_path: Path, monkeyp
                     [
                         {
                             "score": 0.9,
-                            "file": "wiki/concepts/alpha.md",
+                            "file": "wiki/concept/alpha.md",
                             "title": "Alpha",
                             "snippet": "Alpha method evidence.",
                         }
@@ -52,12 +52,12 @@ def test_research_context_uses_qmd_query_without_vsearch(tmp_path: Path, monkeyp
 
 def test_research_context_does_not_depend_on_legacy_report_candidate_collection(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    (paths.wiki_concepts_dir / "alpha.md").write_text("# Alpha\n\nAlpha evidence.", encoding="utf-8")
+    (paths.wiki_concept_dir / "alpha.md").write_text("# Alpha\n\nAlpha evidence.", encoding="utf-8")
 
     def fake_qmd_query(paths_arg, query: str, *, limit: int):
         return [
             query_module.SearchResult(
-                path="wiki/concepts/alpha.md",
+                path="wiki/concept/alpha.md",
                 title="Alpha",
                 score=1.0,
                 snippet="Alpha evidence.",
@@ -69,20 +69,20 @@ def test_research_context_does_not_depend_on_legacy_report_candidate_collection(
 
     result = research_context(str(paths.root), "Alpha")
 
-    assert result["context_pages"][0]["path"] == "wiki/concepts/alpha.md"
+    assert result["context_pages"][0]["path"] == "wiki/concept/alpha.md"
 
 
 def test_research_context_returns_full_short_page(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
     text = "# Alpha\n\nShort page evidence."
-    (paths.wiki_concepts_dir / "alpha.md").write_text(text, encoding="utf-8")
+    (paths.wiki_concept_dir / "alpha.md").write_text(text, encoding="utf-8")
 
     monkeypatch.setattr(
         report_module,
         "qmd_query_wiki",
         lambda *args, **kwargs: [
             query_module.SearchResult(
-                path="wiki/concepts/alpha.md",
+                path="wiki/concept/alpha.md",
                 title="Alpha",
                 score=1.0,
                 snippet="Short page evidence.",
@@ -103,14 +103,14 @@ def test_research_context_expands_content_around_qmd_snippet(tmp_path: Path, mon
     before = "Intro text. " * 80
     target = "Critical transformer limitation evidence appears here."
     after = "Extra trailing text. " * 80
-    (paths.wiki_concepts_dir / "alpha.md").write_text(f"# Alpha\n\n{before}{target}{after}", encoding="utf-8")
+    (paths.wiki_concept_dir / "alpha.md").write_text(f"# Alpha\n\n{before}{target}{after}", encoding="utf-8")
 
     monkeypatch.setattr(
         report_module,
         "qmd_query_wiki",
         lambda *args, **kwargs: [
             query_module.SearchResult(
-                path="wiki/concepts/alpha.md",
+                path="wiki/concept/alpha.md",
                 title="Alpha",
                 score=1.0,
                 snippet=target,
@@ -134,14 +134,14 @@ def test_research_context_falls_back_to_query_matched_paragraph(tmp_path: Path, 
         "The evaluation metric paragraph explains anomaly detection precision and recall.\n\n"
         "Unrelated appendix."
     )
-    (paths.wiki_concepts_dir / "alpha.md").write_text(page_text, encoding="utf-8")
+    (paths.wiki_concept_dir / "alpha.md").write_text(page_text, encoding="utf-8")
 
     monkeypatch.setattr(
         report_module,
         "qmd_query_wiki",
         lambda *args, **kwargs: [
             query_module.SearchResult(
-                path="wiki/concepts/alpha.md",
+                path="wiki/concept/alpha.md",
                 title="Alpha",
                 score=1.0,
                 snippet="This snippet is not present in the markdown.",
@@ -158,9 +158,9 @@ def test_research_context_falls_back_to_query_matched_paragraph(tmp_path: Path, 
 
 def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    alpha = paths.wiki_concepts_dir / "alpha.md"
-    beta = paths.wiki_concepts_dir / "beta.md"
-    gamma = paths.wiki_concepts_dir / "gamma.md"
+    alpha = paths.wiki_concept_dir / "alpha.md"
+    beta = paths.wiki_concept_dir / "beta.md"
+    gamma = paths.wiki_concept_dir / "gamma.md"
     alpha.write_text("# Alpha\n\nAlpha keyword links to [[Beta]] and [[Gamma]].", encoding="utf-8")
     beta.write_text("# Beta\n\nBeta supporting Alpha evidence.\n\n" + ("long beta text " * 200), encoding="utf-8")
     gamma.write_text("# Gamma\n\nGamma supporting Alpha evidence.\n\n" + ("long gamma text " * 200), encoding="utf-8")
@@ -171,21 +171,21 @@ def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, mo
                 {
                     "page_id": "alpha",
                     "title": "Alpha",
-                    "path": "wiki/concepts/alpha.md",
+                    "path": "wiki/concept/alpha.md",
                     "page_type": "concept",
                     "sources": ["source-1"],
                 },
                 {
                     "page_id": "beta",
                     "title": "Beta",
-                    "path": "wiki/concepts/beta.md",
+                    "path": "wiki/concept/beta.md",
                     "page_type": "concept",
                     "sources": ["source-1"],
                 },
                 {
                     "page_id": "gamma",
                     "title": "Gamma",
-                    "path": "wiki/concepts/gamma.md",
+                    "path": "wiki/concept/gamma.md",
                     "page_type": "concept",
                     "sources": ["source-1"],
                 },
@@ -198,7 +198,7 @@ def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, mo
         "qmd_query_wiki",
         lambda *args, **kwargs: [
             query_module.SearchResult(
-                path="wiki/concepts/alpha.md",
+                path="wiki/concept/alpha.md",
                 title="Alpha",
                 score=1.0,
                 snippet="Alpha keyword links",
@@ -220,3 +220,4 @@ def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, mo
     assert len(result["context_pages"]) <= 3
     assert result["total_chars"] <= 360
     assert graph_pages[0]["content_strategy"] in {"paragraph_match", "leading_excerpt", "full"}
+

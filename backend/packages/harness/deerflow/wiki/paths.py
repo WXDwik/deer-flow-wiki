@@ -39,14 +39,16 @@ WIKI_INDEX_FILE_NAME = "index.md"  # wiki 导航目录。
 WIKI_LOG_FILE_NAME = "log.md"  # 操作历史。
 WIKI_OVERVIEW_FILE_NAME = "overview.md"  # 全局概要。
 
-# wiki/ 下的页面分类目录。
-WIKI_ENTITIES_DIR_NAME = "entities"  # 人物、组织、产品、模型、数据集等实体。
-WIKI_CONCEPTS_DIR_NAME = "concepts"  # 理论、方法、技术、术语等概念。
+# wiki/ 下的论文导向页面分类目录。
+WIKI_BACKGROUND_DIR_NAME = "background"  # 简略背景、问题背景、已有路线。
+WIKI_IDEA_DIR_NAME = "idea"  # 创新点、核心做法、论文贡献。
+WIKI_SYSTEM_MODEL_DIR_NAME = "system_model"  # 简要系统模型、任务建模、符号设定。
+WIKI_ALGORITHM_DIR_NAME = "algorithm"  # 算法流程、模型结构、训练/推理步骤。
+WIKI_DATASETS_DIR_NAME = "datasets"  # 数据集、仿真设置、实验数据来源。
+WIKI_SUMMARY_DIR_NAME = "summary"  # 可写入论文第一章研究现状的一段式总结。
+WIKI_CONCEPT_DIR_NAME = "concept"  # 复用概念、术语、指标、基础方法。
 WIKI_SOURCES_DIR_NAME = "sources"  # 每个原始资料对应的摘要页。
-WIKI_QUERIES_DIR_NAME = "queries"  # 保存的聊天回答和研究问答。
-WIKI_SYNTHESIS_DIR_NAME = "synthesis"  # 跨资料综合分析。
-WIKI_COMPARISONS_DIR_NAME = "comparisons"  # 并列对比、方案比较。
-WIKI_DEEPRESEARCH_DIR_NAME = "deepresearch"  # Deep Research 生成的完整研究报告。
+WIKI_SYNTHESIS_DIR_NAME = "synthesis"  # 跨来源综合分析、启发和可沉淀答案。
 WIKI_MAINTENANCE_DIR_NAME = "maintenance"  # lint 报告、schema 演化记录等维护文件。
 
 # Obsidian 配置目录，让生成的 wiki 可以直接作为 Obsidian vault 使用。
@@ -88,14 +90,23 @@ class WikiPaths:
     wiki_overview_file: Path
 
     # wiki 页面分类目录。
+    wiki_background_dir: Path
+    wiki_idea_dir: Path
+    wiki_system_model_dir: Path
+    wiki_algorithm_dir: Path
+    wiki_datasets_dir: Path
+    wiki_summary_dir: Path
+    wiki_concept_dir: Path
+    wiki_sources_dir: Path
+    wiki_synthesis_dir: Path
+    wiki_maintenance_dir: Path
+    # Backward-compatible aliases for older code paths. New wikis do not create
+    # old directory names; these aliases point at the new paper-oriented dirs.
     wiki_entities_dir: Path
     wiki_concepts_dir: Path
-    wiki_sources_dir: Path
     wiki_queries_dir: Path
-    wiki_synthesis_dir: Path
     wiki_comparisons_dir: Path
     wiki_deepresearch_dir: Path
-    wiki_maintenance_dir: Path
 
     # Obsidian 配置目录。
     obsidian_dir: Path
@@ -206,14 +217,21 @@ def build_wiki_paths(wiki_root: str | Path) -> WikiPaths:
         wiki_index_file=wiki_dir / WIKI_INDEX_FILE_NAME,
         wiki_log_file=wiki_dir / WIKI_LOG_FILE_NAME,
         wiki_overview_file=wiki_dir / WIKI_OVERVIEW_FILE_NAME,
-        wiki_entities_dir=wiki_dir / WIKI_ENTITIES_DIR_NAME,
-        wiki_concepts_dir=wiki_dir / WIKI_CONCEPTS_DIR_NAME,
+        wiki_background_dir=wiki_dir / WIKI_BACKGROUND_DIR_NAME,
+        wiki_idea_dir=wiki_dir / WIKI_IDEA_DIR_NAME,
+        wiki_system_model_dir=wiki_dir / WIKI_SYSTEM_MODEL_DIR_NAME,
+        wiki_algorithm_dir=wiki_dir / WIKI_ALGORITHM_DIR_NAME,
+        wiki_datasets_dir=wiki_dir / WIKI_DATASETS_DIR_NAME,
+        wiki_summary_dir=wiki_dir / WIKI_SUMMARY_DIR_NAME,
+        wiki_concept_dir=wiki_dir / WIKI_CONCEPT_DIR_NAME,
         wiki_sources_dir=wiki_dir / WIKI_SOURCES_DIR_NAME,
-        wiki_queries_dir=wiki_dir / WIKI_QUERIES_DIR_NAME,
         wiki_synthesis_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
-        wiki_comparisons_dir=wiki_dir / WIKI_COMPARISONS_DIR_NAME,
-        wiki_deepresearch_dir=wiki_dir / WIKI_DEEPRESEARCH_DIR_NAME,
         wiki_maintenance_dir=wiki_dir / WIKI_MAINTENANCE_DIR_NAME,
+        wiki_entities_dir=wiki_dir / WIKI_IDEA_DIR_NAME,
+        wiki_concepts_dir=wiki_dir / WIKI_CONCEPT_DIR_NAME,
+        wiki_queries_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
+        wiki_comparisons_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
+        wiki_deepresearch_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
         obsidian_dir=root / OBSIDIAN_DIR_NAME,
         llm_wiki_dir=llm_wiki_dir,
         llm_wiki_config_file=llm_wiki_dir / LLM_WIKI_CONFIG_FILE_NAME,
@@ -239,13 +257,15 @@ def ensure_wiki_layout(wiki_root: str | Path) -> WikiPaths:
         paths.raw_sources_dir,
         paths.raw_assets_dir,
         paths.wiki_dir,
-        paths.wiki_entities_dir,
-        paths.wiki_concepts_dir,
+        paths.wiki_background_dir,
+        paths.wiki_idea_dir,
+        paths.wiki_system_model_dir,
+        paths.wiki_algorithm_dir,
+        paths.wiki_datasets_dir,
+        paths.wiki_summary_dir,
+        paths.wiki_concept_dir,
         paths.wiki_sources_dir,
-        paths.wiki_queries_dir,
         paths.wiki_synthesis_dir,
-        paths.wiki_comparisons_dir,
-        paths.wiki_deepresearch_dir,
         paths.wiki_maintenance_dir,
         paths.obsidian_dir,
         paths.llm_wiki_dir,
@@ -271,13 +291,15 @@ def wiki_layout_exists(wiki_root: str | Path) -> bool:
         paths.raw_sources_dir,
         paths.raw_assets_dir,
         paths.wiki_dir,
-        paths.wiki_entities_dir,
-        paths.wiki_concepts_dir,
+        paths.wiki_background_dir,
+        paths.wiki_idea_dir,
+        paths.wiki_system_model_dir,
+        paths.wiki_algorithm_dir,
+        paths.wiki_datasets_dir,
+        paths.wiki_summary_dir,
+        paths.wiki_concept_dir,
         paths.wiki_sources_dir,
-        paths.wiki_queries_dir,
         paths.wiki_synthesis_dir,
-        paths.wiki_comparisons_dir,
-        paths.wiki_deepresearch_dir,
         paths.wiki_maintenance_dir,
         paths.obsidian_dir,
         paths.llm_wiki_dir,
@@ -388,14 +410,50 @@ def source_summary_path(paths: WikiPaths, title: str) -> Path:
     return unique_display_child_path(paths.wiki_sources_dir, filename)
 
 
+def background_page_path(paths: WikiPaths, title: str) -> Path:
+    """为简略背景页生成 wiki/background/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_background_dir, filename)
+
+
+def idea_page_path(paths: WikiPaths, title: str) -> Path:
+    """为创新点页生成 wiki/idea/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_idea_dir, filename)
+
+
+def system_model_page_path(paths: WikiPaths, title: str) -> Path:
+    """为系统模型页生成 wiki/system_model/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_system_model_dir, filename)
+
+
+def algorithm_page_path(paths: WikiPaths, title: str) -> Path:
+    """为算法页生成 wiki/algorithm/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_algorithm_dir, filename)
+
+
+def dataset_page_path(paths: WikiPaths, title: str) -> Path:
+    """为数据集/仿真设置页生成 wiki/datasets/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_datasets_dir, filename)
+
+
+def summary_page_path(paths: WikiPaths, title: str) -> Path:
+    """为研究现状摘要页生成 wiki/summary/ 下的 Markdown 路径。"""
+    filename = f"{display_slugify_name(title)}.md"
+    return unique_display_child_path(paths.wiki_summary_dir, filename)
+
+
 def entity_page_path(paths: WikiPaths, title: str) -> Path:
-    """为实体页生成为 wiki/entities/ 下的 Markdown 路径。"""
+    """Backward-compatible alias for idea pages."""
     filename = f"{display_slugify_name(title)}.md"
     return unique_display_child_path(paths.wiki_entities_dir, filename)
 
 
 def concept_page_path(paths: WikiPaths, title: str) -> Path:
-    """为概念页生成 wiki/concepts/ 下的 Markdown 路径。"""
+    """为概念页生成 wiki/concept/ 下的 Markdown 路径。"""
     filename = f"{display_slugify_name(title)}.md"
     return unique_display_child_path(paths.wiki_concepts_dir, filename)
 
@@ -422,6 +480,22 @@ def deepresearch_page_path(paths: WikiPaths, title: str) -> Path:
     """Generate a Deep Research report page path under wiki/deepresearch/."""
     filename = f"{display_slugify_name(title)}.md"
     return unique_display_child_path(paths.wiki_deepresearch_dir, filename)
+
+
+def normalize_wiki_relative_path(rel_path: str) -> str:
+    """Map legacy wiki directories to the current paper-oriented layout."""
+    normalized = rel_path.strip().replace("\\", "/").lstrip("/")
+    legacy_prefixes = {
+        "wiki/concepts/": "wiki/concept/",
+        "wiki/entities/": "wiki/idea/",
+        "wiki/queries/": "wiki/synthesis/",
+        "wiki/comparisons/": "wiki/synthesis/",
+        "wiki/deepresearch/": "wiki/synthesis/",
+    }
+    for old, new in legacy_prefixes.items():
+        if normalized.startswith(old):
+            return f"{new}{normalized[len(old):]}"
+    return normalized
 
 
 def assert_inside_wiki(paths: WikiPaths, target: str | Path) -> Path:

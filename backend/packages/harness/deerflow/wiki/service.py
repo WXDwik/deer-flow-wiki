@@ -14,6 +14,7 @@ from pathlib import Path
 from deerflow.wiki.archive import archive_answer as archive_wiki_answer
 from deerflow.wiki.ingest import ingest_files, sha256_file
 from deerflow.wiki.lint import lint_wiki
+from deerflow.wiki.maintenance import rebuild_index_markdown, update_overview_markdown
 from deerflow.wiki.models import RawSource
 from deerflow.wiki.paths import WikiPaths, build_wiki_paths, resolve_wiki_root, wiki_layout_exists
 from deerflow.wiki.purpose import update_purpose_after_wiki_change
@@ -74,7 +75,13 @@ def _post_ingest_lint(paths: WikiPaths, *, trigger: str, model_name: str | None 
     }
 
 
-def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: dict, purpose_update: dict | None = None) -> None:
+def _append_ingest_log(
+    paths: WikiPaths,
+    sources: list[RawSource],
+    lint_result: dict,
+    purpose_update: dict | None = None,
+    maintenance_update: dict | None = None,
+) -> None:
     now = datetime.now(UTC).isoformat()
     source_word = "source" if len(sources) == 1 else "sources"
     entry = f"\n## [{now}] source-ingest\n\nImported {len(sources)} {source_word}.\n\nSources:\n"
@@ -116,6 +123,32 @@ def _append_ingest_log(paths: WikiPaths, sources: list[RawSource], lint_result: 
         f"- issues: `{lint_result.get('issue_count', 0)}`\n"
     )
 
+    quality_records = []
+    for source in sources:
+        quality = (getattr(source, "metadata", {}) or {}).get("quality")
+        if isinstance(quality, dict):
+            quality_records.append(quality)
+    if quality_records:
+        unresolved = sum(1 for item in quality_records if not item.get("resolved"))
+        initial_issue_count = sum(len(item.get("initial_issues", [])) for item in quality_records)
+        entry += "\nIngest quality:\n"
+        entry += f"- checked: `{len(quality_records)}`\n"
+        entry += f"- initial issues: `{initial_issue_count}`\n"
+        entry += f"- unresolved records: `{unresolved}`\n"
+
+    if maintenance_update is not None:
+        index_update = maintenance_update.get("index") if isinstance(maintenance_update.get("index"), dict) else {}
+        overview_update = maintenance_update.get("overview") if isinstance(maintenance_update.get("overview"), dict) else {}
+        entry += "\nMaintenance:\n"
+        entry += f"- index: `{bool(index_update.get('updated'))}`"
+        if index_update.get("path"):
+            entry += f" ({index_update['path']})"
+        entry += "\n"
+        entry += f"- overview: `{bool(overview_update.get('updated'))}`"
+        if overview_update.get("path"):
+            entry += f" ({overview_update['path']})"
+        entry += "\n"
+
     if purpose_update is not None:
         entry += "\nPurpose update:\n"
         entry += f"- updated: `{bool(purpose_update.get('updated'))}`\n"
@@ -138,12 +171,7 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
 
     paths = open_wiki(wiki_name_or_path)
     sources = ingest_files(paths, source_files, model_name=model_name)
-    lint_trigger = "batch_ingest" if len(sources) > 1 else "add_source"
-    lint_result = _post_ingest_lint(paths, trigger=lint_trigger, model_name=model_name)
     repo = WikiRepository(paths)
-    for source in sources:
-        source.metadata["lint"] = lint_result
-        repo.add_source(source)
 
     changed_paths = sorted(
         {
@@ -153,16 +181,30 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
             if isinstance(page, dict) and page.get("path")
         }
     )
+    index_update = rebuild_index_markdown(paths)
+    overview_update = update_overview_markdown(paths)
+    maintenance_update = {"index": index_update, "overview": overview_update}
+    for rel_path in (index_update.get("path"), overview_update.get("path")):
+        if isinstance(rel_path, str) and rel_path:
+            changed_paths.append(rel_path)
+
     purpose_update = update_purpose_after_wiki_change(
         paths,
         change_summary=f"Imported {len(sources)} source{'s' if len(sources) != 1 else ''}.",
         changed_paths=changed_paths,
         model_name=model_name,
     )
+    if purpose_update.get("updated") and purpose_update.get("path"):
+        changed_paths.append(str(purpose_update["path"]))
+
+    lint_trigger = "batch_ingest" if len(sources) > 1 else "add_source"
+    lint_result = _post_ingest_lint(paths, trigger=lint_trigger, model_name=model_name)
     for source in sources:
+        source.metadata["lint"] = lint_result
         source.metadata["purpose_update"] = purpose_update
+        source.metadata["maintenance"] = maintenance_update
         repo.add_source(source)
-    _append_ingest_log(paths, sources, lint_result, purpose_update)
+    _append_ingest_log(paths, sources, lint_result, purpose_update, maintenance_update)
 
     return {
         "root": str(paths.root),
@@ -172,6 +214,7 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
             "ingest_mode": "batch" if len(sources) > 1 else "single",
             "lint": lint_result,
             "purpose_update": purpose_update,
+            "maintenance": maintenance_update,
         },
     }
 

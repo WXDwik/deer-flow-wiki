@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -19,7 +19,7 @@ def test_qmd_command_parts_preserves_windows_backslashes(monkeypatch) -> None:
 
 def test_search_wiki_uses_qmd_when_available(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    page = paths.wiki_concepts_dir / "uadformer.md"
+    page = paths.wiki_concept_dir / "uadformer.md"
     page.write_text("# UADFormer\n\nTransformer based user action detection.", encoding="utf-8")
 
     calls: list[list[str]] = []
@@ -38,7 +38,7 @@ def test_search_wiki_uses_qmd_when_available(tmp_path: Path, monkeypatch) -> Non
                         {
                             "docid": "#abc123",
                             "score": 0.91,
-                            "file": "qmd://deerflow-test/concepts/uadformer.md",
+                            "file": "qmd://deerflow-test/concept/uadformer.md",
                             "title": "UADFormer",
                             "snippet": "Transformer based user action detection.",
                         }
@@ -56,7 +56,7 @@ def test_search_wiki_uses_qmd_when_available(tmp_path: Path, monkeypatch) -> Non
 
     results = search_wiki(paths, "user action detection", limit=3)
 
-    assert results[0].path == "wiki/concepts/uadformer.md"
+    assert results[0].path == "wiki/concept/uadformer.md"
     assert results[0].title == "UADFormer"
     assert results[0].score > 0
     search_call = [call for call in calls if call and call[0] == "search"][-1]
@@ -102,8 +102,8 @@ def test_search_wiki_reuses_existing_qmd_collection_for_same_path(tmp_path: Path
 
 def test_search_wiki_rrf_fuses_qmd_search_and_vsearch(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    (paths.wiki_concepts_dir / "exact.md").write_text("# Exact\n\nkeyword match", encoding="utf-8")
-    (paths.wiki_concepts_dir / "semantic.md").write_text("# Semantic\n\nmeaning match", encoding="utf-8")
+    (paths.wiki_concept_dir / "exact.md").write_text("# Exact\n\nkeyword match", encoding="utf-8")
+    (paths.wiki_concept_dir / "semantic.md").write_text("# Semantic\n\nmeaning match", encoding="utf-8")
 
     def fake_run_qmd(args: list[str], *, timeout: float, cwd: Path):
         if args[:2] == ["collection", "add"] or args == ["update"]:
@@ -113,8 +113,8 @@ def test_search_wiki_rrf_fuses_qmd_search_and_vsearch(tmp_path: Path, monkeypatc
                 returncode=0,
                 stdout=json.dumps(
                     [
-                        {"score": 20, "file": "wiki/concepts/exact.md", "title": "Exact", "snippet": "keyword match"},
-                        {"score": 10, "file": "wiki/concepts/semantic.md", "title": "Semantic", "snippet": "meaning match"},
+                        {"score": 20, "file": "wiki/concept/exact.md", "title": "Exact", "snippet": "keyword match"},
+                        {"score": 10, "file": "wiki/concept/semantic.md", "title": "Semantic", "snippet": "meaning match"},
                     ]
                 ),
                 stderr="",
@@ -124,8 +124,8 @@ def test_search_wiki_rrf_fuses_qmd_search_and_vsearch(tmp_path: Path, monkeypatc
                 returncode=0,
                 stdout=json.dumps(
                     [
-                        {"score": 0.9, "file": "wiki/concepts/semantic.md", "title": "Semantic", "snippet": "meaning match"},
-                        {"score": 0.8, "file": "wiki/concepts/exact.md", "title": "Exact", "snippet": "keyword match"},
+                        {"score": 0.9, "file": "wiki/concept/semantic.md", "title": "Semantic", "snippet": "meaning match"},
+                        {"score": 0.8, "file": "wiki/concept/exact.md", "title": "Exact", "snippet": "keyword match"},
                     ]
                 ),
                 stderr="",
@@ -139,15 +139,15 @@ def test_search_wiki_rrf_fuses_qmd_search_and_vsearch(tmp_path: Path, monkeypatc
     results = search_wiki(paths, "hybrid question", limit=5)
 
     assert [item.path for item in results[:2]] == [
-        "wiki/concepts/exact.md",
-        "wiki/concepts/semantic.md",
+        "wiki/concept/exact.md",
+        "wiki/concept/semantic.md",
     ]
     assert results[0].score == results[1].score
 
 
 def test_search_wiki_falls_back_to_keywords_when_qmd_unavailable(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    page = paths.wiki_concepts_dir / "rag.md"
+    page = paths.wiki_concept_dir / "rag.md"
     page.write_text("# RAG\n\nRetrieval Augmented Generation combines retrieval with generation.", encoding="utf-8")
 
     monkeypatch.setenv("DEER_FLOW_WIKI_QMD_ENABLED", "true")
@@ -156,7 +156,7 @@ def test_search_wiki_falls_back_to_keywords_when_qmd_unavailable(tmp_path: Path,
     results = search_wiki(paths, "Retrieval Generation", limit=5)
 
     assert len(results) == 1
-    assert results[0].path == "wiki/concepts/rag.md"
+    assert results[0].path == "wiki/concept/rag.md"
     assert results[0].score > 0
     assert "Retrieval Augmented Generation" in results[0].snippet
 
@@ -179,3 +179,4 @@ def test_parse_qmd_results_accepts_results_object(tmp_path: Path) -> None:
     assert results is not None
     assert results[0].path == "wiki/synthesis/uadformer.md"
     assert results[0].score == 0.75
+
