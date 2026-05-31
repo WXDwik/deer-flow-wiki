@@ -26,13 +26,15 @@ _GRAPH_MIN_RELEVANCE = 2.0
 _GRAPH_CONTEXT_RATIO = 0.30
 
 _TYPE_AFFINITY: dict[str, dict[str, float]] = {
-    "entity": {"concept": 1.2, "entity": 0.8, "source": 1.0, "synthesis": 1.0, "query": 0.8},
-    "concept": {"entity": 1.2, "concept": 0.8, "source": 1.0, "synthesis": 1.2, "query": 1.0},
-    "source": {"entity": 1.0, "concept": 1.0, "source": 0.5, "query": 0.8, "synthesis": 1.0},
-    "query": {"concept": 1.0, "entity": 0.8, "synthesis": 1.0, "source": 0.8, "query": 0.5},
-    "synthesis": {"concept": 1.2, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 0.8, "deepresearch": 1.0},
-    "comparison": {"concept": 1.0, "entity": 1.0, "source": 1.0, "query": 1.0, "synthesis": 1.2, "deepresearch": 1.0},
-    "deepresearch": {"concept": 1.0, "entity": 1.0, "source": 1.0, "query": 0.8, "synthesis": 1.2, "comparison": 1.0},
+    "source": {"summary": 1.2, "idea": 1.2, "concept": 1.0, "synthesis": 1.0, "algorithm": 1.0, "dataset": 0.8},
+    "background": {"summary": 1.0, "idea": 1.0, "concept": 1.0, "synthesis": 1.0, "source": 0.8},
+    "idea": {"summary": 1.2, "algorithm": 1.0, "system_model": 1.0, "concept": 1.0, "synthesis": 1.2, "source": 1.0},
+    "system_model": {"algorithm": 1.2, "idea": 1.0, "dataset": 1.0, "source": 1.0, "synthesis": 1.0},
+    "algorithm": {"system_model": 1.2, "dataset": 1.0, "idea": 1.0, "concept": 1.0, "source": 1.0, "synthesis": 1.0},
+    "dataset": {"algorithm": 1.0, "system_model": 1.0, "source": 1.0, "synthesis": 1.0},
+    "summary": {"idea": 1.2, "background": 1.0, "source": 1.0, "synthesis": 1.0, "concept": 1.0},
+    "concept": {"idea": 1.0, "algorithm": 1.0, "summary": 1.0, "source": 1.0, "synthesis": 1.2},
+    "synthesis": {"summary": 1.2, "idea": 1.2, "concept": 1.2, "source": 1.0, "algorithm": 1.0, "dataset": 1.0},
 }
 
 
@@ -49,7 +51,7 @@ _REPORT_DIMENSION_QUERY_PARTS = (
     "overview background research question",
     "method model approach architecture",
     "data dataset experiment metric evaluation",
-    "comparison baseline alternative",
+    "baseline alternative tradeoff",
     "limitation challenge risk future work",
     "背景 研究问题",
     "方法 模型 技术路线",
@@ -65,12 +67,14 @@ def _page_type_from_path(path: str) -> str | None:
         return None
     return {
         "sources": "source",
-        "entities": "entity",
-        "concepts": "concept",
-        "queries": "query",
+        "background": "background",
+        "idea": "idea",
+        "system_model": "system_model",
+        "algorithm": "algorithm",
+        "datasets": "dataset",
+        "summary": "summary",
+        "concept": "concept",
         "synthesis": "synthesis",
-        "comparisons": "comparison",
-        "deepresearch": "deepresearch",
     }.get(parts[1])
 
 
@@ -238,7 +242,7 @@ def _suggest_queries(report_goal: str, max_queries: int) -> list[str]:
             "summary",
             "method approach",
             "experiment evaluation",
-            "comparison limitation",
+            "baseline limitation",
             "概述 总结",
             "方法 实验 对比 局限",
         ]

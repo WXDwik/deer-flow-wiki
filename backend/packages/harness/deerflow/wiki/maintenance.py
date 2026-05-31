@@ -20,20 +20,9 @@ _SECTION_TITLES = {
     "concept": "Concept",
     "synthesis": "Synthesis",
     "maintenance": "Maintenance",
-    # Legacy page types are grouped into their closest new sections.
-    "entity": "Idea",
-    "query": "Synthesis",
-    "comparison": "Synthesis",
-    "deepresearch": "Synthesis",
 }
 
 _SECTION_ORDER = ("source", "background", "idea", "system_model", "algorithm", "dataset", "summary", "concept", "synthesis", "maintenance")
-_LEGACY_SECTION_MAP = {
-    "entity": "idea",
-    "query": "synthesis",
-    "comparison": "synthesis",
-    "deepresearch": "synthesis",
-}
 
 
 def _wiki_title(paths: WikiPaths) -> str:
@@ -59,7 +48,6 @@ def _group_pages(paths: WikiPaths) -> dict[str, list[dict[str, Any]]]:
         if not isinstance(page, dict):
             continue
         page_type = str(page.get("page_type") or page.get("type") or "").strip()
-        page_type = _LEGACY_SECTION_MAP.get(page_type, page_type)
         if page_type in grouped:
             grouped[page_type].append(page)
     for pages in grouped.values():

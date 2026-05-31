@@ -136,6 +136,19 @@ def _append_ingest_log(
         entry += f"- initial issues: `{initial_issue_count}`\n"
         entry += f"- unresolved records: `{unresolved}`\n"
 
+    stage_records = []
+    for source in sources:
+        stage_status = (getattr(source, "metadata", {}) or {}).get("stage_status")
+        if isinstance(stage_status, dict):
+            stage_records.append(stage_status)
+    if stage_records:
+        entry += "\nIngest stages:\n"
+        for status in stage_records:
+            entry += f"- pipeline: `{status.get('pipeline', 'unknown')}`"
+            if status.get("fallback_level"):
+                entry += f", fallback: `{status['fallback_level']}`"
+            entry += f", generation failures: `{len(status.get('generation_failures', []))}`\n"
+
     if maintenance_update is not None:
         index_update = maintenance_update.get("index") if isinstance(maintenance_update.get("index"), dict) else {}
         overview_update = maintenance_update.get("overview") if isinstance(maintenance_update.get("overview"), dict) else {}

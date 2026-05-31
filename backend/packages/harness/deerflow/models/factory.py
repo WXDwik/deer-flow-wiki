@@ -69,6 +69,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     Returns:
         A chat model instance.
     """
+    structured_output = bool(kwargs.pop("structured_output", False))
     config = app_config or get_app_config()
     if name is None:
         name = config.models[0].name
@@ -126,6 +127,15 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
     if not model_config.supports_reasoning_effort:
         kwargs.pop("reasoning_effort", None)
         model_settings_from_config.pop("reasoning_effort", None)
+
+    if structured_output:
+        use_path = str(model_config.use).lower()
+        model_name = str(model_settings_from_config.get("model") or model_config.model or "").lower()
+        config_name = str(model_config.name or "").lower()
+        if "deepseek" in use_path or "deepseek" in model_name or "deepseek" in config_name:
+            model_settings_from_config["openai_api_base"] = "https://api.deepseek.com/beta"
+            model_settings_from_config.pop("base_url", None)
+            model_settings_from_config.pop("api_base", None)
 
     _enable_stream_usage_by_default(model_config.use, model_settings_from_config)
 

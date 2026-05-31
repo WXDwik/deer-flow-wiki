@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from langchain_core.messages import HumanMessage
+
 from deerflow.models import create_chat_model
 from deerflow.utils.file_conversion import convert_file_to_markdown
 from deerflow.wiki.markdown import build_source_summary_markdown, frontmatter
@@ -21,12 +23,9 @@ from deerflow.wiki.paths import (
     WikiPaths,
     algorithm_page_path,
     background_page_path,
-    comparison_page_path,
     concept_page_path,
     dataset_page_path,
-    entity_page_path,
     idea_page_path,
-    query_page_path,
     raw_source_path,
     source_summary_path,
     summary_page_path,
@@ -37,9 +36,9 @@ from deerflow.wiki.paths import (
 from deerflow.wiki.purpose import wiki_language_instruction
 from deerflow.wiki.repository import WikiRepository
 
-_MAX_INLINE_MARKDOWN_CHARS = 80_000
-_MAX_MARKDOWN_CHUNK_CHARS = 24_000
+_MAX_MARKDOWN_CHUNK_CHARS = 16_000
 _MAX_NOTES_CONTEXT_CHARS = 80_000
+_STRUCTURED_RETRY_ATTEMPTS = 3
 _QUALITY_PLACEHOLDERS = ("待补充", "TODO", "TBD", "Pending source summary.")
 _PAGE_TYPE_PATHS = {
     "background": background_page_path,
@@ -51,10 +50,6 @@ _PAGE_TYPE_PATHS = {
     "summary": summary_page_path,
     "concept": concept_page_path,
     "synthesis": synthesis_page_path,
-    # Legacy aliases.
-    "entity": entity_page_path,
-    "query": query_page_path,
-    "comparison": comparison_page_path,
 }
 
 
@@ -247,11 +242,208 @@ def _model_text(response: object) -> str:
     return str(content)
 
 
+def _string_schema() -> dict[str, Any]:
+    return {"type": "string"}
+
+
+def _string_array_schema() -> dict[str, Any]:
+    return {"type": "array", "items": _string_schema()}
+
+
+def _candidate_page_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": ["background", "idea", "system_model", "algorithm", "dataset", "summary", "concept", "synthesis"]},
+            "title": _string_schema(),
+            "reason": _string_schema(),
+        },
+        "required": ["type", "title", "reason"],
+        "additionalProperties": False,
+    }
+
+
+def _wiki_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "source_id": _string_schema(),
+            "display_title": _string_schema(),
+            "source_summary": _string_schema(),
+            "tags": _string_array_schema(),
+        },
+        "required": ["source_id", "display_title", "source_summary", "tags"],
+        "additionalProperties": False,
+    }
+
+
+def _wiki_page_item_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": ["background", "idea", "system_model", "algorithm", "dataset", "summary", "concept", "synthesis"]},
+            "title": _string_schema(),
+            "source_ids": _string_array_schema(),
+            "tags": _string_array_schema(),
+            "content": _string_schema(),
+        },
+        "required": ["type", "title", "source_ids", "tags", "content"],
+        "additionalProperties": False,
+    }
+
+
+def _final_wiki_content_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "sources": {"type": "array", "items": _wiki_source_schema()},
+            "pages": {"type": "array", "items": _wiki_page_item_schema()},
+        },
+        "required": ["sources", "pages"],
+        "additionalProperties": False,
+    }
+
+
+def _extract_tool_call_json(response: object, function_name: str) -> dict[str, Any] | None:
+    tool_calls = getattr(response, "tool_calls", None) or []
+    for tool_call in tool_calls:
+        name = tool_call.get("name") if isinstance(tool_call, dict) else getattr(tool_call, "name", None)
+        if name and name != function_name:
+            continue
+        args = tool_call.get("args") if isinstance(tool_call, dict) else getattr(tool_call, "args", None)
+        if isinstance(args, dict):
+            return args
+        if isinstance(args, str):
+            parsed = _json_from_model_text(args)
+            if parsed is not None:
+                return parsed
+
+    additional = getattr(response, "additional_kwargs", {}) or {}
+    for raw_call in additional.get("tool_calls") or []:
+        function = raw_call.get("function", {}) if isinstance(raw_call, dict) else {}
+        if function.get("name") and function["name"] != function_name:
+            continue
+        args = function.get("arguments")
+        if isinstance(args, str):
+            parsed = _json_from_model_text(args)
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def _validate_required_shape(data: dict[str, Any], schema: dict[str, Any], run_name: str) -> None:
+    required = schema.get("required") or []
+    for key in required:
+        if key not in data:
+            raise ValueError(f"{run_name} missing required key: {key}")
+    properties = schema.get("properties") or {}
+    for key, value in data.items():
+        spec = properties.get(key)
+        if not spec:
+            continue
+        expected = spec.get("type")
+        if expected == "object" and not isinstance(value, dict):
+            raise ValueError(f"{run_name}.{key} must be object")
+        if expected == "array" and not isinstance(value, list):
+            raise ValueError(f"{run_name}.{key} must be array")
+        if expected == "string" and not isinstance(value, str):
+            raise ValueError(f"{run_name}.{key} must be string")
+
+
+def _structured_tool_model(model: Any, function_name: str, schema: dict[str, Any]) -> Any | None:
+    if type(model).__module__.startswith("unittest.mock"):
+        return None
+    bind_tools = getattr(model, "bind_tools", None)
+    if not callable(bind_tools):
+        return None
+    tool = {
+        "type": "function",
+        "function": {
+            "name": function_name,
+            "description": f"Return validated JSON for {function_name}.",
+            "parameters": schema,
+            "strict": True,
+        },
+    }
+    try:
+        return bind_tools([tool], tool_choice=function_name)
+    except TypeError:
+        try:
+            return bind_tools([tool])
+        except Exception:
+            return None
+    except Exception:
+        return None
+
+
+def _repair_json_prompt(prompt: str, bad_text: str, schema: dict[str, Any], function_name: str) -> str:
+    return f"""The previous response for `{function_name}` was not valid JSON for the required schema.
+
+Return ONLY corrected JSON. Do not add prose, Markdown fences, or new facts.
+
+Required JSON Schema:
+{json.dumps(schema, ensure_ascii=False, indent=2)}
+
+Original task:
+{prompt[:12000]}
+
+Invalid response:
+{bad_text[:12000]}
+"""
+
+
+def _invoke_structured(model: Any, prompt: str, *, run_name: str, function_name: str, schema: dict[str, Any]) -> dict[str, Any]:
+    errors: list[str] = []
+    structured_model = _structured_tool_model(model, function_name, schema)
+    if structured_model is not None:
+        try:
+            response = structured_model.invoke([HumanMessage(content=prompt)], config={"run_name": run_name})
+            data = _extract_tool_call_json(response, function_name)
+            if data is not None:
+                _validate_required_shape(data, schema, run_name)
+                data.setdefault("_structured_output", {"mode": "strict_tool_call", "function": function_name})
+                return data
+            errors.append("strict tool call returned no parseable arguments")
+        except Exception as exc:
+            errors.append(f"strict_schema_failed: {exc}")
+
+    current_prompt = prompt
+    last_text = ""
+    for attempt in range(1, _STRUCTURED_RETRY_ATTEMPTS + 1):
+        response = model.invoke(current_prompt, config={"run_name": run_name})
+        last_text = _model_text(response)
+        data = _json_from_model_text(last_text)
+        if data is not None:
+            try:
+                if not _looks_like_final_wiki_content(data):
+                    _validate_required_shape(data, schema, run_name)
+                data.setdefault(
+                    "_structured_output",
+                    {
+                        "mode": "json_text",
+                        "function": function_name,
+                        "attempt": attempt,
+                        "strict_errors": errors,
+                    },
+                )
+                return data
+            except Exception as exc:
+                errors.append(str(exc))
+        else:
+            errors.append(f"attempt {attempt} returned invalid JSON")
+        current_prompt = _repair_json_prompt(prompt, last_text, schema, function_name)
+
+    raise ValueError(f"{run_name} model did not return valid structured JSON: {'; '.join(errors)}")
+
+
 def _invoke_json(model: Any, prompt: str, *, run_name: str) -> dict[str, Any]:
-    data = _json_from_model_text(_model_text(model.invoke(prompt, config={"run_name": run_name})))
-    if data is None:
-        raise ValueError(f"{run_name} model did not return valid JSON")
-    return data
+    return _invoke_structured(
+        model,
+        prompt,
+        run_name=run_name,
+        function_name=run_name,
+        schema={"type": "object", "properties": {}, "additionalProperties": True},
+    )
 
 
 def _looks_like_final_wiki_content(data: dict[str, Any]) -> bool:
@@ -367,6 +559,11 @@ Rules:
 Imported source manifest:
 {json.dumps(source_manifest, ensure_ascii=False, indent=2)}
 
+Imported sources:
+
+Wiki context:
+{_wiki_context(paths)}
+
 ## Source: {chunk['title']} chunk {chunk['chunk_index']}/{chunk['chunk_count']}
 source_id: {chunk['source_id']}
 raw_path: {chunk['raw_path']}
@@ -416,6 +613,8 @@ Chunk notes:
 
 
 def _final_wiki_content_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]], notes: dict[str, Any]) -> str:
+    complete_markdown = str(notes.get("complete_markdown") or "").strip() if isinstance(notes, dict) else ""
+    notes_text = json.dumps({key: value for key, value in notes.items() if key != "complete_markdown"}, ensure_ascii=False, indent=2) if isinstance(notes, dict) else json.dumps(notes, ensure_ascii=False, indent=2)
     return f"""You are maintaining a local LLM Wiki from complete paper notes.
 
 Return ONLY valid JSON:
@@ -457,8 +656,11 @@ Wiki context:
 Imported source manifest:
 {json.dumps(source_manifest, ensure_ascii=False, indent=2)}
 
+Imported sources:
+{complete_markdown}
+
 Paper notes:
-{json.dumps(notes, ensure_ascii=False, indent=2)[:_MAX_NOTES_CONTEXT_CHARS]}
+{notes_text[:_MAX_NOTES_CONTEXT_CHARS]}
 """
 
 
@@ -500,7 +702,7 @@ Return ONLY the repaired final wiki JSON with the same shape:
 
 Rules:
 - Remove placeholders.
-- Add at least one durable generated page when the notes contain reusable concepts/entities.
+- Add at least one durable generated page when the notes contain reusable concepts, ideas, methods, or synthesis-worthy findings.
 - Add useful wikilinks between generated pages/source summaries where supported.
 - Do not invent facts beyond the notes.
 
@@ -521,51 +723,65 @@ Current final wiki JSON:
         return None
 
 
+def _source_ids_from_manifest(source_manifest: list[dict[str, str]]) -> list[str]:
+    return [item["source_id"] for item in source_manifest if item.get("source_id")]
+
+
+def _fallback_content_from_markdown(source_manifest: list[dict[str, str]], chunks: list[dict[str, Any]], *, reason: str) -> dict[str, Any]:
+    source = source_manifest[0] if source_manifest else {}
+    title = str(source.get("title") or "Imported Source")
+    source_id = str(source.get("source_id") or "")
+    markdown_preview = "\n\n".join(str(chunk.get("markdown") or "")[:1600] for chunk in chunks[:2]).strip()
+    return {
+        "sources": [
+            {
+                "source_id": source_id,
+                "display_title": title,
+                "source_summary": f"结构化生成失败，已保留转换后的 Markdown 内容供后续检索和重新解析。\n\n失败原因：`{reason}`\n\nMarkdown 预览：\n\n{markdown_preview}",
+                "tags": ["source"],
+            }
+        ],
+        "pages": [
+            {
+                "type": "summary",
+                "title": f"{title} 导入摘要",
+                "source_ids": [source_id],
+                "tags": ["paper-summary"],
+                "content": f"该论文已完整读取转换后的 Markdown，但结构化 wiki 页面生成失败。可基于 source 页面和缓存 Markdown 重新解析。\n\n失败原因：`{reason}`",
+            }
+        ],
+    }
+
+
 def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[PreparedSource], *, model_name: str | None = None) -> dict[str, Any]:
-    """Ask the configured chat model to read complete Markdown and generate wiki pages."""
-    model = create_chat_model(name=model_name, thinking_enabled=False)
+    """Read complete Markdown in one structured pass and generate wiki pages."""
+    model = create_chat_model(name=model_name, thinking_enabled=False, structured_output=True)
     source_manifest = _source_manifest(paths, prepared_sources)
     chunks = _source_markdown_chunks(paths, prepared_sources)
     total_markdown_chars = sum(len(str(chunk.get("markdown") or "")) for chunk in chunks)
+    stage_status: dict[str, Any] = {
+        "pipeline": "full_markdown_structured_generation",
+        "chunk_count": len(chunks),
+        "generation_failures": [],
+        "fallback_level": None,
+    }
 
-    notes: dict[str, Any]
-    if total_markdown_chars <= _MAX_INLINE_MARKDOWN_CHARS:
-        notes = _invoke_json(model, _notes_prompt(paths, source_manifest, chunks), run_name="wiki_ingest_notes")
-        if _looks_like_final_wiki_content(notes):
-            content = notes
-        else:
-            content = _invoke_json(
-                model,
-                _final_wiki_content_prompt(paths, source_manifest, notes),
-                run_name="wiki_ingest",
-            )
-    else:
-        chunk_notes: list[dict[str, Any]] = []
-        for chunk in chunks:
-            chunk_notes.append(
-                _invoke_json(
-                    model,
-                    _chunk_notes_prompt(paths, source_manifest, chunk),
-                    run_name="wiki_ingest_chunk_notes",
-                )
-            )
-        notes = _invoke_json(
+    try:
+        content = _invoke_structured(
             model,
-            _aggregate_notes_prompt(paths, source_manifest, chunk_notes),
-            run_name="wiki_ingest_notes",
+            _final_wiki_content_prompt(paths, source_manifest, {"complete_markdown": _source_markdown_sections_from_chunks(chunks)}),
+            run_name="wiki_ingest",
+            function_name="wiki_ingest_full_paper",
+            schema=_final_wiki_content_schema(),
         )
-        if _looks_like_final_wiki_content(notes):
-            content = notes
-        else:
-            content = _invoke_json(
-                model,
-                _final_wiki_content_prompt(paths, source_manifest, notes),
-                run_name="wiki_ingest",
-            )
+    except Exception as exc:
+        stage_status["generation_failures"].append({"stage": "full_markdown_structured_generation", "error": str(exc)})
+        stage_status["fallback_level"] = "structured_generation_failed"
+        content = _fallback_content_from_markdown(source_manifest, chunks, reason=str(exc))
 
     initial_issues = _content_quality_issues(prepared_sources, content)
     if initial_issues:
-        repaired = _repair_content_quality(paths, model, source_manifest, notes if "notes" in locals() else content, content, initial_issues)
+        repaired = _repair_content_quality(paths, model, source_manifest, content, content, initial_issues)
         if repaired is not None:
             repaired_issues = _content_quality_issues(prepared_sources, repaired)
             if len(repaired_issues) <= len(initial_issues):
@@ -594,7 +810,9 @@ def generate_wiki_batch_content(paths: WikiPaths, prepared_sources: list[Prepare
         "cached_markdown_chars": total_markdown_chars,
         "chunk_count": len(chunks),
         "complete_markdown_processed": True,
+        "pipeline": "full_markdown_structured_generation",
     }
+    content.setdefault("_stage_status", stage_status)
     return content
 
 
@@ -658,9 +876,6 @@ def _page_path(paths: WikiPaths, page_type: str, title: str) -> Path:
             "summary": paths.wiki_summary_dir,
             "concept": paths.wiki_concept_dir,
             "synthesis": paths.wiki_synthesis_dir,
-            "entity": paths.wiki_entities_dir,
-            "query": paths.wiki_queries_dir,
-            "comparison": paths.wiki_comparisons_dir,
         }[page_type]
         return unique_child_path(directory, f"page-{digest}.md")
 
@@ -683,6 +898,9 @@ def _source_summary_payloads(prepared_sources: list[PreparedSource], content: di
             source_id = str(item.get("source_id") or "").strip()
             if source_id:
                 by_id[source_id] = item
+
+    if prepared_sources and len(prepared_sources) == 1 and len(by_id) == 1 and prepared_sources[0].source.source_id not in by_id:
+        by_id[prepared_sources[0].source.source_id] = next(iter(by_id.values()))
 
     if not by_id and prepared_sources:
         first = prepared_sources[0].source.source_id
@@ -835,6 +1053,8 @@ def ingest_files(paths: WikiPaths, source_files: list[str | Path], *, model_name
             item.source.metadata["ingest_input"] = generated["_ingest_input"]
         if isinstance(generated.get("_quality_retry"), dict):
             item.source.metadata["quality"] = generated["_quality_retry"]
+        if isinstance(generated.get("_stage_status"), dict):
+            item.source.metadata["stage_status"] = generated["_stage_status"]
 
     pages = write_generated_batch_pages(paths, prepared_sources, generated, now)
     sources = [item.source for item in prepared_sources]

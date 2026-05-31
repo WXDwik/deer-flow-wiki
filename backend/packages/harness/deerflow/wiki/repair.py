@@ -11,7 +11,7 @@ from typing import Any
 
 from deerflow.models import create_chat_model
 from deerflow.wiki.lint import LintIssue, lint_wiki, resolve_lint_mode
-from deerflow.wiki.paths import WikiPaths, display_slugify_name, normalize_wiki_relative_path, slugify_name
+from deerflow.wiki.paths import WikiPaths, display_slugify_name, slugify_name
 
 _MAX_FILE_CHARS = 12_000
 _MAX_TOTAL_CONTEXT_CHARS = 60_000
@@ -46,7 +46,6 @@ def _root_relative_markdown_path(paths: WikiPaths, page: str) -> Path | None:
         return None
     if not raw.startswith("wiki/"):
         raw = f"wiki/{raw}"
-    raw = normalize_wiki_relative_path(raw)
     candidate = (paths.root / raw).resolve()
     try:
         candidate.relative_to(paths.wiki_dir.resolve())
@@ -58,7 +57,7 @@ def _root_relative_markdown_path(paths: WikiPaths, page: str) -> Path | None:
 
 
 def _allowed_edit_path(paths: WikiPaths, raw_path: str) -> Path:
-    candidate = (paths.root / normalize_wiki_relative_path(raw_path.strip().replace("\\", "/"))).resolve()
+    candidate = (paths.root / raw_path.strip().replace("\\", "/")).resolve()
     try:
         candidate.relative_to(paths.wiki_dir.resolve())
     except ValueError as exc:
@@ -269,15 +268,13 @@ Hard constraints:
   and acronyms in visible titles, headings, labels, and prose.
 - For broken links, if a slugified target page exists, replace the link with
   that slug. Create pages only for genuinely missing, source-supported topics.
-- For wiki/deepresearch pages, fix frontmatter, wikilinks, or index structure
-  only; do not rewrite the report's factual body content.
 
 Return ONLY valid JSON:
 {{
   "summary": "Short repair summary",
   "changes": [
     {{
-      "path": "wiki/concepts/example.md",
+      "path": "wiki/concept/example.md",
       "operation": "replace",
       "reason": "Why this file changes",
       "old": "Exact existing Markdown substring to replace",

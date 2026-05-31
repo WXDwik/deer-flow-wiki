@@ -19,11 +19,6 @@ PageType = Literal[
     "summary",
     "concept",
     "synthesis",
-    # Legacy aliases kept for older wiki data and callers.
-    "entity",
-    "query",
-    "comparison",
-    "deepresearch",
 ]
 IngestStatus = Literal["pending", "processing", "completed", "failed", "skipped"]
 ArchiveAction = Literal["none", "create_page", "update_existing", "create_and_update"]

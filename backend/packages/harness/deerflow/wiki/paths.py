@@ -100,14 +100,6 @@ class WikiPaths:
     wiki_sources_dir: Path
     wiki_synthesis_dir: Path
     wiki_maintenance_dir: Path
-    # Backward-compatible aliases for older code paths. New wikis do not create
-    # old directory names; these aliases point at the new paper-oriented dirs.
-    wiki_entities_dir: Path
-    wiki_concepts_dir: Path
-    wiki_queries_dir: Path
-    wiki_comparisons_dir: Path
-    wiki_deepresearch_dir: Path
-
     # Obsidian 配置目录。
     obsidian_dir: Path
 
@@ -227,11 +219,6 @@ def build_wiki_paths(wiki_root: str | Path) -> WikiPaths:
         wiki_sources_dir=wiki_dir / WIKI_SOURCES_DIR_NAME,
         wiki_synthesis_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
         wiki_maintenance_dir=wiki_dir / WIKI_MAINTENANCE_DIR_NAME,
-        wiki_entities_dir=wiki_dir / WIKI_IDEA_DIR_NAME,
-        wiki_concepts_dir=wiki_dir / WIKI_CONCEPT_DIR_NAME,
-        wiki_queries_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
-        wiki_comparisons_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
-        wiki_deepresearch_dir=wiki_dir / WIKI_SYNTHESIS_DIR_NAME,
         obsidian_dir=root / OBSIDIAN_DIR_NAME,
         llm_wiki_dir=llm_wiki_dir,
         llm_wiki_config_file=llm_wiki_dir / LLM_WIKI_CONFIG_FILE_NAME,
@@ -446,56 +433,16 @@ def summary_page_path(paths: WikiPaths, title: str) -> Path:
     return unique_display_child_path(paths.wiki_summary_dir, filename)
 
 
-def entity_page_path(paths: WikiPaths, title: str) -> Path:
-    """Backward-compatible alias for idea pages."""
-    filename = f"{display_slugify_name(title)}.md"
-    return unique_display_child_path(paths.wiki_entities_dir, filename)
-
-
 def concept_page_path(paths: WikiPaths, title: str) -> Path:
     """为概念页生成 wiki/concept/ 下的 Markdown 路径。"""
     filename = f"{display_slugify_name(title)}.md"
-    return unique_display_child_path(paths.wiki_concepts_dir, filename)
-
-
-def query_page_path(paths: WikiPaths, title: str) -> Path:
-    """为保存的问答/研究结果生成 wiki/queries/ 下的 Markdown 路径。"""
-    filename = f"{display_slugify_name(title)}.md"
-    return unique_display_child_path(paths.wiki_queries_dir, filename)
+    return unique_display_child_path(paths.wiki_concept_dir, filename)
 
 
 def synthesis_page_path(paths: WikiPaths, title: str) -> Path:
     """为综合分析页生成 wiki/synthesis/ 下的 Markdown 路径。"""
     filename = f"{display_slugify_name(title)}.md"
     return unique_display_child_path(paths.wiki_synthesis_dir, filename)
-
-
-def comparison_page_path(paths: WikiPaths, title: str) -> Path:
-    """为对比分析页生成 wiki/comparisons/ 下的 Markdown 路径。"""
-    filename = f"{display_slugify_name(title)}.md"
-    return unique_display_child_path(paths.wiki_comparisons_dir, filename)
-
-
-def deepresearch_page_path(paths: WikiPaths, title: str) -> Path:
-    """Generate a Deep Research report page path under wiki/deepresearch/."""
-    filename = f"{display_slugify_name(title)}.md"
-    return unique_display_child_path(paths.wiki_deepresearch_dir, filename)
-
-
-def normalize_wiki_relative_path(rel_path: str) -> str:
-    """Map legacy wiki directories to the current paper-oriented layout."""
-    normalized = rel_path.strip().replace("\\", "/").lstrip("/")
-    legacy_prefixes = {
-        "wiki/concepts/": "wiki/concept/",
-        "wiki/entities/": "wiki/idea/",
-        "wiki/queries/": "wiki/synthesis/",
-        "wiki/comparisons/": "wiki/synthesis/",
-        "wiki/deepresearch/": "wiki/synthesis/",
-    }
-    for old, new in legacy_prefixes.items():
-        if normalized.startswith(old):
-            return f"{new}{normalized[len(old):]}"
-    return normalized
 
 
 def assert_inside_wiki(paths: WikiPaths, target: str | Path) -> Path:

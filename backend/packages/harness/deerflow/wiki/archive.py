@@ -23,10 +23,9 @@ from deerflow.wiki.models import (
 )
 from deerflow.wiki.paths import (
     WikiPaths,
-    comparison_page_path,
     concept_page_path,
-    entity_page_path,
-    query_page_path,
+    idea_page_path,
+    summary_page_path,
     synthesis_page_path,
 )
 from deerflow.wiki.purpose import update_purpose_after_wiki_change, wiki_language_instruction
@@ -34,7 +33,7 @@ from deerflow.wiki.repository import WikiRepository
 from deerflow.wiki.schema import schema_context
 
 _MAX_CONTEXT_PAGE_CHARS = 8_000
-_ARCHIVE_PAGE_TYPES = {"synthesis", "summary", "concept", "idea", "query", "comparison", "entity"}
+_ARCHIVE_PAGE_TYPES = {"synthesis", "summary", "concept", "idea"}
 _ARCHIVE_ACTIONS = {"none", "create_page", "update_existing", "create_and_update"}
 _UPDATE_OPERATIONS = {"replace", "append", "rewrite"}
 
@@ -116,7 +115,7 @@ Decide the archival action:
 - create_page: the answer has independent long-term value as a synthesis page
   or a paper-writing summary page.
 - update_existing: the answer only adds a local correction or small supplement to
-  existing entity/concept/synthesis pages.
+  existing idea/concept/synthesis pages.
 - create_and_update: the answer deserves a new page and should also update related
   existing pages with a short summary/link.
 
@@ -272,23 +271,13 @@ Cited pages:
 
 
 def _archive_page_path(paths: WikiPaths, draft: ArchiveDraft) -> Path:
-    if draft.page_type == "query":
-        return query_page_path(paths, draft.title)
     if draft.page_type == "synthesis":
         return synthesis_page_path(paths, draft.title)
-    if draft.page_type == "comparison":
-        return comparison_page_path(paths, draft.title)
     if draft.page_type == "concept":
         return concept_page_path(paths, draft.title)
-    if draft.page_type == "entity":
-        return entity_page_path(paths, draft.title)
     if draft.page_type == "summary":
-        from deerflow.wiki.paths import summary_page_path
-
         return summary_page_path(paths, draft.title)
     if draft.page_type == "idea":
-        from deerflow.wiki.paths import idea_page_path
-
         return idea_page_path(paths, draft.title)
     raise ValueError(f"Unsupported archive page type: {draft.page_type}")
 
@@ -340,7 +329,7 @@ def build_existing_page_updates(
     model_name: str | None = None,
 ) -> list[WikiPageChange]:
     """Ask the model for precise local edits to existing wiki pages."""
-    target_pages = decision.target_pages or [page.path for page in context_pages if page.page_type in {"concept", "idea", "summary", "synthesis", "entity"}]
+    target_pages = decision.target_pages or [page.path for page in context_pages if page.page_type in {"concept", "idea", "summary", "synthesis"}]
     target_pages = sorted(dict.fromkeys(target_pages))
     context: dict[str, str] = {}
     for rel in target_pages:
@@ -456,15 +445,12 @@ def update_index_markdown(paths: WikiPaths, archived_page: WikiPage | None) -> N
     paths.wiki_index_file.parent.mkdir(parents=True, exist_ok=True)
     current = paths.wiki_index_file.read_text(encoding="utf-8", errors="ignore") if paths.wiki_index_file.exists() else "# Wiki Index\n"
     section = {
-        "query": "## Queries",
         "synthesis": "## Synthesis",
-        "comparison": "## Comparisons",
         "summary": "## Summary",
         "concept": "## Concept",
         "idea": "## Idea",
-        "entity": "## Idea",
         "source": "## Sources",
-    }.get(archived_page.page_type, "## Queries")
+    }.get(archived_page.page_type, "## Synthesis")
     stem = Path(archived_page.path).stem
     link_target = stem if stem == archived_page.title else f"{stem}|{archived_page.title}"
     link = f"- [[{link_target}]]"

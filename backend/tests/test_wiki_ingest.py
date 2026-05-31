@@ -185,12 +185,13 @@ def test_ingest_file_falls_back_when_model_output_is_invalid(tmp_path: Path) -> 
 
     cached_md = paths.raw_sources_dir / ".cache" / "notes.md"
     assert cached_md.read_text(encoding="utf-8") == "# Notes\n\nImportant local content."
-    assert source.metadata["ingest_mode"] == "fallback"
-    assert "generation_error" in source.metadata
+    assert source.metadata["ingest_mode"] == "llm"
+    assert source.metadata["stage_status"]["fallback_level"] == "structured_generation_failed"
 
     source_summary = paths.wiki_sources_dir / "notes.md"
     text = source_summary.read_text(encoding="utf-8")
     assert "Important local content." in text
+    assert (paths.wiki_summary_dir / "notes 导入摘要.md").is_file()
 
 
 def test_ingest_files_analyzes_batch_together(tmp_path: Path) -> None:
@@ -244,7 +245,7 @@ def test_ingest_files_passes_model_name_to_chat_factory(tmp_path: Path) -> None:
     with patch("deerflow.wiki.ingest.create_chat_model", return_value=model) as factory:
         ingest_files(paths, [source_file], model_name="deepseek-v4-pro")
 
-    factory.assert_called_once_with(name="deepseek-v4-pro", thinking_enabled=False)
+    factory.assert_called_once_with(name="deepseek-v4-pro", thinking_enabled=False, structured_output=True)
 
 
 def test_ingest_prompt_uses_configured_zh_language_for_english_source(tmp_path: Path) -> None:
@@ -504,48 +505,14 @@ def test_ingest_long_markdown_processes_content_after_40k_chars(tmp_path: Path) 
     model = MagicMock()
 
     def respond(prompt: str, *args, **kwargs):
-        run_name = kwargs.get("config", {}).get("run_name")
-        if run_name == "wiki_ingest_chunk_notes":
-            finding = late_marker if late_marker in prompt else "early filler"
-            return AIMessage(
-                content=json.dumps(
-                    {
-                        "chunk_note": {
-                            "source_id": "source-from-prompt",
-                            "findings": [finding],
-                            "results_seen": [finding] if late_marker in prompt else [],
-                        }
-                    }
-                )
-            )
-        if run_name == "wiki_ingest_notes":
-            assert late_marker in prompt
-            return AIMessage(
-                content=json.dumps(
-                    {
-                        "paper_notes": [
-                            {
-                                "source_id": json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nChunk notes:", 1)[0])[0]["source_id"],
-                                "display_title": "Long Paper",
-                                "research_problem": "Long-document ingestion.",
-                                "core_contributions": [late_marker],
-                                "method": "Full Markdown chunk processing.",
-                                "experiments": "Reported in late chunks.",
-                                "results": late_marker,
-                                "limitations": "Not found.",
-                                "important_terms": ["Long Context"],
-                                "candidate_pages": [{"type": "concept", "title": "Long Context", "reason": "Important term."}],
-                            }
-                        ]
-                    }
-                )
-            )
+        assert kwargs.get("config", {}).get("run_name") == "wiki_ingest"
+        assert late_marker in prompt
         return AIMessage(
             content=json.dumps(
                 {
                     "sources": [
                         {
-                            "source_id": json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nPaper notes:", 1)[0])[0]["source_id"],
+                            "source_id": json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nImported sources:", 1)[0])[0]["source_id"],
                             "display_title": "Long Paper",
                             "source_summary": f"完整导入后保留后段结果：{late_marker} 相关页面 [[Long Context]]。",
                             "tags": ["long"],
@@ -573,6 +540,77 @@ def test_ingest_long_markdown_processes_content_after_40k_chars(tmp_path: Path) 
     assert late_marker in source_page.read_text(encoding="utf-8")
     assert source.metadata["ingest_input"]["complete_markdown_processed"] is True
     assert source.metadata["ingest_input"]["chunk_count"] > 1
+
+
+def test_ingest_uses_strict_tool_call_arguments_when_available(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "strict-paper.md"
+    source_file.write_text("# Strict Paper\n\nA strict structured output test.", encoding="utf-8")
+
+    class BoundStrictModel:
+        def __init__(self, function_name: str) -> None:
+            self.function_name = function_name
+
+        def invoke(self, *args, **kwargs):
+            assert self.function_name == "wiki_ingest_full_paper"
+            payload = {
+                "sources": [
+                    {
+                        "source_id": "strict-source",
+                        "display_title": "Strict Paper",
+                        "source_summary": "Strict tool-call summary with [[Strict Output Summary]].",
+                        "tags": ["strict"],
+                    }
+                ],
+                "pages": [
+                    {
+                        "type": "summary",
+                        "title": "Strict Output Summary",
+                        "source_ids": ["strict-source"],
+                        "tags": ["strict"],
+                        "content": "Strict schema generated this summary.",
+                    }
+                ],
+            }
+            return AIMessage(content="", tool_calls=[{"name": self.function_name, "args": payload, "id": f"call-{self.function_name}"}])
+
+    class StrictModel:
+        def __init__(self) -> None:
+            self.bound_functions: list[str] = []
+
+        def bind_tools(self, tools, **kwargs):
+            function_name = tools[0]["function"]["name"]
+            assert tools[0]["function"]["strict"] is True
+            self.bound_functions.append(function_name)
+            return BoundStrictModel(function_name)
+
+        def invoke(self, *args, **kwargs):
+            raise AssertionError("strict tool call path should be used")
+
+    model = StrictModel()
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    assert model.bound_functions == ["wiki_ingest_full_paper"]
+    assert (paths.wiki_sources_dir / "Strict Paper.md").is_file()
+    assert (paths.wiki_summary_dir / "Strict Output Summary.md").is_file()
+    assert source.metadata["stage_status"]["pipeline"] == "full_markdown_structured_generation"
+
+
+def test_ingest_structured_failure_keeps_more_than_single_source_page(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "partial-paper.md"
+    source_file.write_text("# Partial Paper\n\nA full-paper fallback test.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content="not json")
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    assert source.metadata["ingest_mode"] == "llm"
+    assert source.metadata["stage_status"]["fallback_level"] == "structured_generation_failed"
+    assert (paths.wiki_sources_dir / "partial-paper.md").is_file()
+    assert (paths.wiki_summary_dir / "partial-paper 导入摘要.md").is_file()
 
 
 def test_ingest_quality_retry_repairs_placeholder_summary(tmp_path: Path) -> None:
