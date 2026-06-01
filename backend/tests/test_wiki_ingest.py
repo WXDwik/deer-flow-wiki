@@ -172,6 +172,90 @@ def test_ingest_file_preserves_space_filename_wikilinks_for_lint(tmp_path: Path)
     assert [issue for issue in lint_wiki(paths) if issue.type == "broken-link"] == []
 
 
+def test_ingest_unlinks_unresolved_model_wikilinks_before_writing(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "paper.md"
+    source_file.write_text("# Paper\n\nThe paper describes a pilot module and JCEDD method.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "ignored-by-single-source-compat",
+                        "display_title": "Paper",
+                        "source_summary": "Summary links [[导频长度自适应模块]] and [[Real Page]].",
+                        "tags": ["paper"],
+                    }
+                ],
+                "pages": [
+                    {
+                        "type": "concept",
+                        "title": "Real Page",
+                        "source_ids": [],
+                        "tags": ["paper"],
+                        "content": "Keep [[Real Page]] but unlink [[异步交替迭代JCEDD]].",
+                    }
+                ],
+            }
+        )
+    )
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    source_text = (paths.wiki_sources_dir / "Paper.md").read_text(encoding="utf-8")
+    page_text = (paths.wiki_concept_dir / "Real Page.md").read_text(encoding="utf-8")
+    assert "[[Real Page]]" in source_text
+    assert "[[导频长度自适应模块]]" not in source_text
+    assert "导频长度自适应模块" in source_text
+    assert "[[异步交替迭代JCEDD]]" not in page_text
+    assert "异步交替迭代JCEDD" in page_text
+    assert not (paths.root / "导频长度自适应模块.md").exists()
+    assert source.metadata["link_normalization"]["unlinked"] == 2
+    assert [issue for issue in lint_wiki(paths) if issue.type == "broken-link"] == []
+
+
+def test_ingest_rewrites_title_style_wikilinks_to_existing_page_stems(tmp_path: Path) -> None:
+    paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
+    source_file = tmp_path / "paper.md"
+    source_file.write_text("# Paper\n\nMethod content.", encoding="utf-8")
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(
+        content=json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "ignored-by-single-source-compat",
+                        "display_title": "Paper",
+                        "source_summary": "Summary links [[Method: A/B]].",
+                        "tags": ["paper"],
+                    }
+                ],
+                "pages": [
+                    {
+                        "type": "algorithm",
+                        "title": "Method: A/B",
+                        "source_ids": [],
+                        "tags": ["paper"],
+                        "content": "A method page.",
+                    }
+                ],
+            }
+        )
+    )
+
+    with patch("deerflow.wiki.ingest.create_chat_model", return_value=model):
+        source = ingest_file(paths, source_file)
+
+    source_text = (paths.wiki_sources_dir / "Paper.md").read_text(encoding="utf-8")
+    assert "[[Method- A-B|Method: A/B]]" in source_text
+    assert (paths.wiki_algorithm_dir / "Method- A-B.md").is_file()
+    assert source.metadata["link_normalization"]["rewritten"] == 1
+
+
 def test_ingest_file_falls_back_when_model_output_is_invalid(tmp_path: Path) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
     source_file = tmp_path / "notes.md"

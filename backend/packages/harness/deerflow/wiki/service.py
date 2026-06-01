@@ -149,6 +149,20 @@ def _append_ingest_log(
                 entry += f", fallback: `{status['fallback_level']}`"
             entry += f", generation failures: `{len(status.get('generation_failures', []))}`\n"
 
+    link_records = []
+    for source in sources:
+        link_normalization = (getattr(source, "metadata", {}) or {}).get("link_normalization")
+        if isinstance(link_normalization, dict):
+            link_records.append(link_normalization)
+    if link_records:
+        checked = sum(int(item.get("checked", 0) or 0) for item in link_records)
+        rewritten = sum(int(item.get("rewritten", 0) or 0) for item in link_records)
+        unlinked = sum(int(item.get("unlinked", 0) or 0) for item in link_records)
+        entry += "\nWikilink normalization:\n"
+        entry += f"- checked: `{checked}`\n"
+        entry += f"- rewritten: `{rewritten}`\n"
+        entry += f"- unlinked unresolved: `{unlinked}`\n"
+
     if maintenance_update is not None:
         index_update = maintenance_update.get("index") if isinstance(maintenance_update.get("index"), dict) else {}
         overview_update = maintenance_update.get("overview") if isinstance(maintenance_update.get("overview"), dict) else {}

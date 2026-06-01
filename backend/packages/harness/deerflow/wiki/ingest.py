@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import mimetypes
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,8 +26,10 @@ from deerflow.wiki.paths import (
     background_page_path,
     concept_page_path,
     dataset_page_path,
+    display_slugify_name,
     idea_page_path,
     raw_source_path,
+    slugify_name,
     source_summary_path,
     summary_page_path,
     synthesis_page_path,
@@ -469,7 +472,9 @@ def _paper_ingest_guidance(paths: WikiPaths) -> str:
 - Treat schema.md in the wiki context as the active contract for directory structure, page types, source traceability, and write-back behavior.
 - Source language does not override the wiki language.
 - Source display_title and page title are reader-facing labels; preserve readable titles and conventional capitalization.
-- Wikilinks must target existing page filename stems without .md, for example [[Lite Transformer for UAD]].
+- Wikilinks must target existing page filename stems without .md, or exact page titles returned in the same JSON response, for example [[Lite Transformer for UAD]].
+- Do not create wikilinks to shorthand topic names unless a page with that exact filename stem exists or is returned in the same JSON response.
+- If you mention a related idea but do not create a matching page for it, write plain text instead of a wikilink.
 - Old lowercase or hyphenated slug links are accepted for compatibility, but newly generated links should use the actual page stem when it is available.
 
 {wiki_language_instruction(paths)}"""
@@ -644,7 +649,8 @@ Rules:
 - Prefer page types by paper-reading purpose: background for concise background, idea for innovations, system_model for problem/system model, algorithm for method or model procedure, dataset for datasets/simulation settings, summary for one-paragraph research-status text suitable for a paper introduction, concept for reusable terms, and synthesis for cross-source insights or useful archived answers.
 - Do not output placeholder text such as 待补充, TODO, TBD, or Pending.
 - Create reusable background/idea/system_model/algorithm/dataset/summary/concept/synthesis pages for important paper content, methods, datasets, metrics, literature-review statements, and cross-source insights.
-- Add useful wikilinks. Only link to pages that already exist or pages returned in this JSON response.
+- Add useful wikilinks only when the target is an existing wiki page filename stem or an exact page title returned in this JSON response.
+- Do not link to uncreated submodules, methods, datasets, or short concept names. If a linked target deserves navigation, return it as a page in `pages`; otherwise keep it as plain text.
 - Base every statement on the paper notes.
 - Page content must be Markdown body only: no YAML frontmatter and no duplicate top-level # title.
 
@@ -932,6 +938,151 @@ def _page_source_ids(item: dict[str, Any], valid_source_ids: set[str], default_s
     return filtered or default_source_ids
 
 
+_WIKILINK_RE = re.compile(r"\[\[\s*([^\]|]+?)\s*(?:\|\s*([^\]]+?)\s*)?\]\]")
+
+
+def _wikilink_match_keys(value: str) -> set[str]:
+    raw = value.strip().replace("\\", "/")
+    if raw.lower().endswith(".md"):
+        raw = raw[:-3]
+    raw = raw.strip("/")
+    if raw.startswith("wiki/"):
+        raw = raw[5:]
+
+    candidates = {raw}
+    if "/" in raw:
+        candidates.add(Path(raw).name)
+
+    keys: set[str] = set()
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        keys.add(candidate.lower())
+        try:
+            keys.add(display_slugify_name(candidate).lower())
+        except ValueError:
+            pass
+        try:
+            keys.add(slugify_name(candidate))
+        except ValueError:
+            pass
+    return keys
+
+
+def _add_wikilink_target(targets: dict[str, str], *, stem: str, aliases: list[str] | None = None) -> None:
+    clean_stem = stem.strip()
+    if not clean_stem:
+        return
+    values = [clean_stem, *(aliases or [])]
+    for value in values:
+        for key in _wikilink_match_keys(value):
+            targets.setdefault(key, clean_stem)
+
+
+def _planned_wikilink_targets(paths: WikiPaths, prepared_sources: list[PreparedSource], content: dict[str, Any]) -> dict[str, str]:
+    targets: dict[str, str] = {}
+    for path in paths.wiki_dir.rglob("*.md"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(paths.wiki_dir).with_suffix("").as_posix()
+        _add_wikilink_target(targets, stem=path.stem, aliases=[rel])
+
+    source_payloads = _source_summary_payloads(prepared_sources, content)
+    for item in prepared_sources:
+        payload = source_payloads.get(item.source.source_id, {})
+        display_title = str(payload.get("display_title") or item.source.title).strip() or item.source.title
+        summary_path = _source_summary_page_path(paths, display_title)
+        rel = summary_path.relative_to(paths.wiki_dir).with_suffix("").as_posix()
+        _add_wikilink_target(targets, stem=summary_path.stem, aliases=[display_title, rel])
+
+    for item in content.get("pages", []):
+        if not isinstance(item, dict):
+            continue
+        page_type = str(item.get("type") or "").strip()
+        if page_type == "datasets":
+            page_type = "dataset"
+        title = str(item.get("title") or "").strip()
+        if page_type not in _PAGE_TYPE_PATHS or not title:
+            continue
+        path = _page_path(paths, page_type, title)
+        rel = path.relative_to(paths.wiki_dir).with_suffix("").as_posix()
+        _add_wikilink_target(targets, stem=path.stem, aliases=[title, rel])
+    return targets
+
+
+def _normalize_wikilinks(markdown: str, targets: dict[str, str]) -> tuple[str, dict[str, int]]:
+    stats = {"checked": 0, "kept": 0, "rewritten": 0, "unlinked": 0}
+
+    def replace(match: re.Match[str]) -> str:
+        target = match.group(1).strip()
+        label = (match.group(2) or "").strip()
+        stats["checked"] += 1
+        resolved = None
+        for key in _wikilink_match_keys(target):
+            resolved = targets.get(key)
+            if resolved is not None:
+                break
+
+        if resolved is None:
+            stats["unlinked"] += 1
+            return label or target
+
+        if resolved == target and not label:
+            stats["kept"] += 1
+            return f"[[{resolved}]]"
+
+        visible = label or target
+        if visible == resolved:
+            stats["rewritten"] += 1
+            return f"[[{resolved}]]"
+        stats["rewritten"] += 1
+        return f"[[{resolved}|{visible}]]"
+
+    return _WIKILINK_RE.sub(replace, markdown), stats
+
+
+def _normalize_generated_content_wikilinks(paths: WikiPaths, prepared_sources: list[PreparedSource], content: dict[str, Any]) -> dict[str, int]:
+    targets = _planned_wikilink_targets(paths, prepared_sources, content)
+    totals = {"checked": 0, "kept": 0, "rewritten": 0, "unlinked": 0}
+
+    def add_stats(stats: dict[str, int]) -> None:
+        for key in totals:
+            totals[key] += stats.get(key, 0)
+
+    raw_sources = content.get("sources")
+    if isinstance(raw_sources, list):
+        seen_payloads: set[int] = set()
+        for payload in _source_summary_payloads(prepared_sources, content).values():
+            payload_id = id(payload)
+            if payload_id in seen_payloads:
+                continue
+            seen_payloads.add(payload_id)
+            summary = payload.get("source_summary")
+            if isinstance(summary, str) and summary:
+                normalized, stats = _normalize_wikilinks(summary, targets)
+                payload["source_summary"] = normalized
+                add_stats(stats)
+
+    summary = content.get("source_summary")
+    if isinstance(summary, str) and summary:
+        normalized, stats = _normalize_wikilinks(summary, targets)
+        content["source_summary"] = normalized
+        add_stats(stats)
+
+    for item in content.get("pages", []):
+        if not isinstance(item, dict):
+            continue
+        body = item.get("content")
+        if isinstance(body, str) and body:
+            normalized, stats = _normalize_wikilinks(body, targets)
+            item["content"] = normalized
+            add_stats(stats)
+
+    content["_link_normalization"] = totals
+    return totals
+
+
 def write_generated_batch_pages(
     paths: WikiPaths,
     prepared_sources: list[PreparedSource],
@@ -940,6 +1091,7 @@ def write_generated_batch_pages(
 ) -> list[WikiPage]:
     """Write model-generated source summaries and cross-source wiki pages."""
     pages: list[WikiPage] = []
+    _normalize_generated_content_wikilinks(paths, prepared_sources, content)
     source_payloads = _source_summary_payloads(prepared_sources, content)
 
     for item in prepared_sources:
@@ -1059,6 +1211,8 @@ def ingest_files(paths: WikiPaths, source_files: list[str | Path], *, model_name
     pages = write_generated_batch_pages(paths, prepared_sources, generated, now)
     sources = [item.source for item in prepared_sources]
     for source in sources:
+        if isinstance(generated.get("_link_normalization"), dict):
+            source.metadata["link_normalization"] = generated["_link_normalization"]
         source.metadata["generated_pages"] = [
             {
                 "title": page.title,
