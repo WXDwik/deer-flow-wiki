@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -105,6 +105,7 @@ def test_ingest_source_summary_uses_readable_display_title_from_model(tmp_path: 
     source_file.write_text("# Deep Learning-Based Activity Detection for UAD\n\nThe paper studies MIMO systems.", encoding="utf-8")
 
     model = MagicMock()
+
     def inject_real_source_id(prompt: str, *args, **kwargs):
         manifest = json.loads(prompt.split("Imported source manifest:\n", 1)[1].split("\n\nImported sources:", 1)[0])
         payload = {
@@ -127,7 +128,7 @@ def test_ingest_source_summary_uses_readable_display_title_from_model(tmp_path: 
 
     source_page = paths.wiki_sources_dir / "Deep Learning-Based Activity Detection for UAD.md"
     text = source_page.read_text(encoding="utf-8")
-    assert '# Deep Learning-Based Activity Detection for UAD' in text
+    assert "# Deep Learning-Based Activity Detection for UAD" in text
     assert 'title: "Deep Learning-Based Activity Detection for UAD"' in text
     assert "中文说明保留 `UAD` 和 `MIMO`" in text
     assert source.metadata["generated_pages"][0]["title"] == "Deep Learning-Based Activity Detection for UAD"
@@ -363,9 +364,7 @@ def test_ingest_prompt_uses_configured_zh_language_for_english_source(tmp_path: 
     assert "use Chinese explanatory prose even when imported sources are English" in prompt
     assert "Source language does not override the wiki language" in prompt
     assert "这篇论文讨论检索增强生成" in (paths.wiki_sources_dir / "english-paper.md").read_text(encoding="utf-8")
-    assert "检索增强生成结合检索与生成能力" in (
-        paths.wiki_concept_dir / "Retrieval Augmented Generation.md"
-    ).read_text(encoding="utf-8")
+    assert "检索增强生成结合检索与生成能力" in (paths.wiki_concept_dir / "Retrieval Augmented Generation.md").read_text(encoding="utf-8")
 
 
 def test_ingest_prompt_uses_configured_en_language(tmp_path: Path) -> None:
@@ -953,4 +952,3 @@ def test_sync_pending_sources_respects_limit(tmp_path: Path) -> None:
     counts = status["counts"]
     assert counts["parsed"] == 1
     assert counts["pending"] == 1
-

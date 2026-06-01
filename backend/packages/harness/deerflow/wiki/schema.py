@@ -131,23 +131,12 @@ def _append_schema_changelog(paths: WikiPaths, *, previous_version: int, new_ver
     if not changelog.exists():
         changelog.write_text("# Schema Changelog\n", encoding="utf-8")
     with changelog.open("a", encoding="utf-8") as f:
-        f.write(
-            f"\n## [{now}] v{previous_version} -> v{new_version}\n\n"
-            f"{summary}\n\n"
-            f"Change request:\n\n{change_request}\n"
-        )
+        f.write(f"\n## [{now}] v{previous_version} -> v{new_version}\n\n{summary}\n\nChange request:\n\n{change_request}\n")
 
 
 def _append_schema_log(paths: WikiPaths, *, previous_version: int, new_version: int, summary: str) -> None:
     now = datetime.now(UTC).isoformat()
-    entry = (
-        f"\n## [{now}] schema-evolution\n\n"
-        f"Updated schema from v{previous_version} to v{new_version}.\n\n"
-        f"{summary}\n\n"
-        "Changed files:\n"
-        "- `schema.md`\n"
-        "- `wiki/maintenance/schema-changelog.md`\n"
-    )
+    entry = f"\n## [{now}] schema-evolution\n\nUpdated schema from v{previous_version} to v{new_version}.\n\n{summary}\n\nChanged files:\n- `schema.md`\n- `wiki/maintenance/schema-changelog.md`\n"
     paths.wiki_log_file.parent.mkdir(parents=True, exist_ok=True)
     with paths.wiki_log_file.open("a", encoding="utf-8") as f:
         f.write(entry)

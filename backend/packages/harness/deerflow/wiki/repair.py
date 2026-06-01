@@ -206,9 +206,7 @@ def build_repair_instructions(paths: WikiPaths, issues: list[LintIssue | dict]) 
                         "wiki/synthesis/*.md",
                     ],
                     "instruction": (
-                        "Repair this issue by editing Markdown files under wiki/ only. "
-                        "Do not modify raw/, .llm-wiki/, binary assets, or source documents. "
-                        "Prefer updating existing pages. Create new Markdown pages only when needed."
+                        "Repair this issue by editing Markdown files under wiki/ only. Do not modify raw/, .llm-wiki/, binary assets, or source documents. Prefer updating existing pages. Create new Markdown pages only when needed."
                     ),
                     "verify": [
                         "Run light lint again.",

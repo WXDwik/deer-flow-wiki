@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -36,9 +36,7 @@ def test_structural_lint_resolves_display_stem_and_legacy_slug_wikilinks(tmp_pat
     _write(paths.wiki_idea_dir / "Deep-Learning-Based-Activity-Detection-for-UAD.md", "# Deep Learning-Based Activity Detection for UAD\n")
     _write(
         paths.wiki_concept_dir / "Activity-Detection.md",
-        "Links to [[Deep-Learning-Based-Activity-Detection-for-UAD]], "
-        "[[deep-learning-based-activity-detection-for-uad]], and "
-        "[[idea/Deep-Learning-Based-Activity-Detection-for-UAD|Deep Learning-Based Activity Detection for UAD]].",
+        "Links to [[Deep-Learning-Based-Activity-Detection-for-UAD]], [[deep-learning-based-activity-detection-for-uad]], and [[idea/Deep-Learning-Based-Activity-Detection-for-UAD|Deep Learning-Based Activity Detection for UAD]].",
     )
 
     issues = structural_lint_wiki(paths)
@@ -113,4 +111,3 @@ def test_resolve_lint_mode_applies_trigger_policy() -> None:
     assert resolve_lint_mode(mode="light", trigger="batch_ingest") == "light"
     assert resolve_lint_mode(mode="deep", trigger="manual") == "deep"
     assert resolve_lint_mode(mode="light", include_semantic=True) == "deep"
-

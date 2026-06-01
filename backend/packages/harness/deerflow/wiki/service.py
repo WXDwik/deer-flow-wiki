@@ -116,12 +116,7 @@ def _append_ingest_log(
                 entry += f" ({page_type})"
             entry += "\n"
 
-    entry += (
-        "\nLint:\n"
-        f"- mode: `{lint_result.get('mode', 'light')}`\n"
-        f"- trigger: `{lint_result.get('trigger', 'add_source')}`\n"
-        f"- issues: `{lint_result.get('issue_count', 0)}`\n"
-    )
+    entry += f"\nLint:\n- mode: `{lint_result.get('mode', 'light')}`\n- trigger: `{lint_result.get('trigger', 'add_source')}`\n- issues: `{lint_result.get('issue_count', 0)}`\n"
 
     quality_records = []
     for source in sources:
@@ -200,14 +195,7 @@ def add_sources(wiki_name_or_path: str, source_files: list[str | Path], *, model
     sources = ingest_files(paths, source_files, model_name=model_name)
     repo = WikiRepository(paths)
 
-    changed_paths = sorted(
-        {
-            str(page.get("path"))
-            for source in sources
-            for page in source.metadata.get("generated_pages", [])
-            if isinstance(page, dict) and page.get("path")
-        }
-    )
+    changed_paths = sorted({str(page.get("path")) for source in sources for page in source.metadata.get("generated_pages", []) if isinstance(page, dict) and page.get("path")})
     index_update = rebuild_index_markdown(paths)
     overview_update = update_overview_markdown(paths)
     maintenance_update = {"index": index_update, "overview": overview_update}
@@ -263,11 +251,7 @@ def source_status(wiki_name_or_path: str) -> dict:
     files = []
     raw_files = []
     if paths.raw_sources_dir.is_dir():
-        raw_files = [
-            path
-            for path in paths.raw_sources_dir.rglob("*")
-            if path.is_file() and ".cache" not in path.relative_to(paths.raw_sources_dir).parts
-        ]
+        raw_files = [path for path in paths.raw_sources_dir.rglob("*") if path.is_file() and ".cache" not in path.relative_to(paths.raw_sources_dir).parts]
 
     seen_index_paths: set[str] = set()
     for raw_file in sorted(raw_files, key=lambda item: item.relative_to(paths.raw_sources_dir).as_posix()):

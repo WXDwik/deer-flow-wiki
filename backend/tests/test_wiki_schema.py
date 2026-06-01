@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import shutil
@@ -125,4 +125,3 @@ def test_evolve_schema_apply_updates_schema_config_and_logs(tmp_path: Path) -> N
     assert "Add stable page creation rules." in (paths.wiki_maintenance_dir / "schema-changelog.md").read_text(encoding="utf-8")
     assert "schema-evolution" in paths.wiki_log_file.read_text(encoding="utf-8")
     assert WikiRepository(paths).read_config()["schema"]["current_version"] == 2
-

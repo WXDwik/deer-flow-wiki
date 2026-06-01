@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -179,4 +179,3 @@ def test_parse_qmd_results_accepts_results_object(tmp_path: Path) -> None:
     assert results is not None
     assert results[0].path == "wiki/synthesis/uadformer.md"
     assert results[0].score == 0.75
-

@@ -371,7 +371,7 @@ export function InputBox({
     setUltraConfirmOpen(false);
     setPendingUltraMessage(null);
     if (message) {
-      onSubmit?.(message);
+      void onSubmit?.(message);
     }
   }, [onSubmit, pendingUltraMessage]);
 
@@ -385,7 +385,9 @@ export function InputBox({
       reasoning_effort: "high",
     });
     if (message) {
-      setTimeout(() => onSubmit?.(message), 0);
+      setTimeout(() => {
+        void onSubmit?.(message);
+      }, 0);
     }
   }, [context, onContextChange, onSubmit, pendingUltraMessage]);
 

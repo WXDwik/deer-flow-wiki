@@ -18,7 +18,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 # 默认 wiki 根目录。
 # 如果用户只输入一个 wiki 名称，比如 "rag-research"，
 # 系统会默认创建到 `.deer-flow/wiki/rag-research/`。
@@ -169,12 +168,7 @@ def resolve_wiki_root(
 
     # 判断用户传进来的是“路径”还是“普通 wiki 名称”。
     # 只要包含路径分隔符、是绝对路径、或以 "." 开头，就当成路径处理。
-    looks_like_path = (
-        candidate.is_absolute()
-        or "/" in raw
-        or "\\" in raw
-        or raw.startswith(".")
-    )
+    looks_like_path = candidate.is_absolute() or "/" in raw or "\\" in raw or raw.startswith(".")
 
     if looks_like_path:
         return candidate.resolve()

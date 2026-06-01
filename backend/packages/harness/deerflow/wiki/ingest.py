@@ -225,13 +225,13 @@ def _source_markdown_sections_from_chunks(chunks: list[dict[str, Any]]) -> str:
     for chunk in chunks:
         suffix = f" chunk {chunk['chunk_index']}/{chunk['chunk_count']}" if chunk["chunk_count"] > 1 else ""
         sections.append(
-            f"""## Source: {chunk['title']}{suffix}
-source_id: {chunk['source_id']}
-raw_path: {chunk['raw_path']}
-cached_markdown_path: {chunk['cached_markdown_path']}
+            f"""## Source: {chunk["title"]}{suffix}
+source_id: {chunk["source_id"]}
+raw_path: {chunk["raw_path"]}
+cached_markdown_path: {chunk["cached_markdown_path"]}
 
 ```markdown
-{chunk['markdown']}
+{chunk["markdown"]}
 ```"""
         )
 
@@ -540,9 +540,9 @@ def _chunk_notes_prompt(paths: WikiPaths, source_manifest: list[dict[str, str]],
 Return ONLY valid JSON:
 {{
   "chunk_note": {{
-    "source_id": "{chunk['source_id']}",
-    "chunk_index": {chunk['chunk_index']},
-    "chunk_count": {chunk['chunk_count']},
+    "source_id": "{chunk["source_id"]}",
+    "chunk_index": {chunk["chunk_index"]},
+    "chunk_count": {chunk["chunk_count"]},
     "findings": [],
     "metadata_seen": {{}},
     "methods_seen": [],
@@ -569,12 +569,12 @@ Imported sources:
 Wiki context:
 {_wiki_context(paths)}
 
-## Source: {chunk['title']} chunk {chunk['chunk_index']}/{chunk['chunk_count']}
-source_id: {chunk['source_id']}
-raw_path: {chunk['raw_path']}
+## Source: {chunk["title"]} chunk {chunk["chunk_index"]}/{chunk["chunk_count"]}
+source_id: {chunk["source_id"]}
+raw_path: {chunk["raw_path"]}
 
 ```markdown
-{chunk['markdown']}
+{chunk["markdown"]}
 ```
 """
 
@@ -646,7 +646,13 @@ Return ONLY valid JSON:
 Rules:
 - Return one source summary for each imported source.
 - Source summaries must include metadata when available, research problem, core contributions, method, experiments/results, conclusions, limitations, and links to key generated pages.
-- Prefer page types by paper-reading purpose: background for concise background, idea for innovations, system_model for problem/system model, algorithm for method or model procedure, dataset for datasets/simulation settings, summary for one-paragraph research-status text suitable for a paper introduction, concept for reusable terms, and synthesis for cross-source insights or useful archived answers.
+- Prefer page types by paper-reading purpose:
+  background for concise background, idea for innovations,
+  system_model for problem/system model, algorithm for method or model procedure,
+  dataset for datasets/simulation settings,
+  summary for one-paragraph research-status text suitable for a paper introduction,
+  concept for reusable terms,
+  and synthesis for cross-source insights or useful archived answers.
 - Do not output placeholder text such as 待补充, TODO, TBD, or Pending.
 - Create reusable background/idea/system_model/algorithm/dataset/summary/concept/synthesis pages for important paper content, methods, datasets, metrics, literature-review statements, and cross-source insights.
 - Add useful wikilinks only when the target is an existing wiki page filename stem or an exact page title returned in this JSON response.

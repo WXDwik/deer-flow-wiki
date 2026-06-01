@@ -26,9 +26,7 @@ function patchPerformanceMeasure() {
     return;
   }
 
-  const measure = Reflect.get(performance, "measure") as
-    | Measure
-    | undefined;
+  const measure = Reflect.get(performance, "measure") as Measure | undefined;
   if (
     typeof measure !== "function" ||
     Reflect.get(measure, PATCHED_MEASURE_SYMBOL)
@@ -37,11 +35,7 @@ function patchPerformanceMeasure() {
   }
 
   const originalMeasure = measure.bind(performance);
-  const patchedMeasure: Measure = (
-    name,
-    startOrMeasureOptions?,
-    endMark?,
-  ) => {
+  const patchedMeasure: Measure = (name, startOrMeasureOptions?, endMark?) => {
     if (
       typeof startOrMeasureOptions === "object" &&
       startOrMeasureOptions !== null

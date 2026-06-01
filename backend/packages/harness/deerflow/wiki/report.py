@@ -47,6 +47,7 @@ class _GraphNode:
     outlinks: frozenset[str]
     inlinks: frozenset[str]
 
+
 _REPORT_DIMENSION_QUERY_PARTS = (
     "overview background research question",
     "method model approach architecture",
@@ -109,11 +110,7 @@ def _frontmatter_list(markdown: str, key: str) -> list[str]:
     body = match.group(1)
     block = re.search(rf"^{re.escape(key)}:\s*\n((?:\s+-\s+.+\n?)*)", body, flags=re.MULTILINE)
     if block:
-        return [
-            item.group(1).strip().strip("\"'")
-            for line in block.group(1).splitlines()
-            if (item := re.match(r"^\s+-\s+(.+?)\s*$", line))
-        ]
+        return [item.group(1).strip().strip("\"'") for line in block.group(1).splitlines() if (item := re.match(r"^\s+-\s+(.+?)\s*$", line))]
     inline = re.search(rf"^{re.escape(key)}:\s*\[([^\]]*)\]", body, flags=re.MULTILINE)
     if inline:
         return [part.strip().strip("\"'") for part in inline.group(1).split(",") if part.strip()]
@@ -172,6 +169,7 @@ def _build_retrieval_graph(paths: WikiPaths, index: dict[str, Any]) -> dict[str,
         )
         for rel_path, node in raw_nodes.items()
     }
+
 
 def _neighbors(node: _GraphNode) -> set[str]:
     return set(node.outlinks) | set(node.inlinks)
@@ -483,7 +481,7 @@ def research_context(
     qmd_quota = max(page_limit - graph_quota, 0)
     selected: list[tuple[int, dict[str, Any]]] = []
 
-    for candidate in seed_candidates[:qmd_quota or page_limit]:
+    for candidate in seed_candidates[: qmd_quota or page_limit]:
         priority = 0 if _candidate_title_match(candidate, research_task) else 1
         selected.append((priority, candidate))
 

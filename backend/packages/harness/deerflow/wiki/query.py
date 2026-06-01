@@ -283,10 +283,7 @@ def _rrf_fuse_ranked_results(*ranked_lists: list[SearchResult]) -> list[SearchRe
                 )
             scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (_RRF_K + rank)
 
-    results = [
-        SearchResult(path=item.path, title=item.title, score=scores[item.path], snippet=item.snippet)
-        for item in fused.values()
-    ]
+    results = [SearchResult(path=item.path, title=item.title, score=scores[item.path], snippet=item.snippet) for item in fused.values()]
     results.sort(key=lambda item: (-item.score, item.path))
     return results
 

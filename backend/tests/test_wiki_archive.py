@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -276,4 +276,3 @@ def test_service_archive_answer_returns_plain_dict(tmp_path: Path) -> None:
 
     assert result["answer_markdown"] == "See [[rag]]."
     assert result["archive_decision"]["should_archive"] is False
-

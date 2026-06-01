@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -232,4 +232,3 @@ def test_repair_lint_rejects_replace_when_old_text_is_missing(tmp_path: Path) ->
             )
 
     assert page.read_text(encoding="utf-8") == "Current content."
-

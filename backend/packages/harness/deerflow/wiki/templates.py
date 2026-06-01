@@ -1,4 +1,4 @@
-﻿"""LLM Wiki 默认模板。
+"""LLM Wiki 默认模板。
 
 这个模块只负责生成新建 wiki 时需要的初始文件内容。
 它不负责写文件，真正写文件由 `scaffold.py` 或 `repository.py` 完成。
@@ -62,6 +62,7 @@ def default_schema(language: str = "zh-CN") -> str:
     schema.md 表达“这个 wiki 应该怎么组织和写作”。
     """
     return _paper_schema_zh() if language.lower().startswith("zh") else _paper_schema_en()
+
 
 def default_index(title: str) -> str:
     """生成 wiki/index.md 默认内容。"""
@@ -258,6 +259,7 @@ Every wiki page must have one YAML frontmatter block. The system writes frontmat
 Search and read relevant wiki pages before answering. Archive durable cross-paper insights or useful answers into `wiki/synthesis/`. Lint repair may edit only Markdown files under `wiki/`; never edit `raw/` or `.llm-wiki/`.
 """
 
+
 def default_log(created_at: str) -> str:
     """生成 wiki/log.md 默认内容。"""
     return f"""# Operation Log
@@ -309,4 +311,3 @@ def default_queue_json() -> dict:
 def default_reviews_json() -> dict:
     """生成 .llm-wiki/reviews.json 默认内容。"""
     return {"items": []}
-

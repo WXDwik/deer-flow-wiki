@@ -1,5 +1,7 @@
 """Deterministic maintenance for human-readable wiki system pages."""
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -143,7 +145,13 @@ def update_overview_markdown(paths: WikiPaths) -> dict[str, Any]:
         lines = [
             f"# {title} Overview",
             "",
-            f"This wiki currently contains {len(sources)} imported sources, {len(background)} background pages, {len(ideas)} idea pages, {len(system_models)} system-model pages, {len(algorithms)} algorithm pages, {len(datasets)} dataset pages, {len(summaries)} summary pages, {len(concepts)} concept pages, and {len(synthesis)} synthesis pages.",
+            (
+                f"This wiki currently contains {len(sources)} imported sources, "
+                f"{len(background)} background pages, {len(ideas)} idea pages, "
+                f"{len(system_models)} system-model pages, {len(algorithms)} algorithm pages, "
+                f"{len(datasets)} dataset pages, {len(summaries)} summary pages, "
+                f"{len(concepts)} concept pages, and {len(synthesis)} synthesis pages."
+            ),
             "",
             "## Sources",
             "",

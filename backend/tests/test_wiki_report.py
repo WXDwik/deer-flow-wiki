@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -128,12 +128,7 @@ def test_research_context_expands_content_around_qmd_snippet(tmp_path: Path, mon
 
 def test_research_context_falls_back_to_query_matched_paragraph(tmp_path: Path, monkeypatch) -> None:
     paths = create_wiki_database(str(tmp_path / "wiki"), title="Research Wiki")
-    page_text = (
-        "# Alpha\n\n"
-        "General introduction that is not enough.\n\n"
-        "The evaluation metric paragraph explains anomaly detection precision and recall.\n\n"
-        "Unrelated appendix."
-    )
+    page_text = "# Alpha\n\nGeneral introduction that is not enough.\n\nThe evaluation metric paragraph explains anomaly detection precision and recall.\n\nUnrelated appendix."
     (paths.wiki_concept_dir / "alpha.md").write_text(page_text, encoding="utf-8")
 
     monkeypatch.setattr(
@@ -220,4 +215,3 @@ def test_research_context_adds_bounded_graph_pages_with_quota(tmp_path: Path, mo
     assert len(result["context_pages"]) <= 3
     assert result["total_chars"] <= 360
     assert graph_pages[0]["content_strategy"] in {"paragraph_match", "leading_excerpt", "full"}
-
